@@ -32,9 +32,12 @@ get_client_ipaddr(struct http_request *req)
 size_t
 populate_api_arguments(struct http_request *req)
 {
-    char * content_type;
+    char * content_type = NULL;
     
-    http_request_header(req, "content-type", &content_type);
+    // default to GET arguments if nothing specified
+    if (!http_request_header(req, "content-type", &content_type))
+        return http_populate_get(req);
+
     kore_log(LOG_NOTICE, "reading content type: %s", content_type);
     
     if (strstr(content_type, "application/json") != NULL) {
@@ -43,10 +46,12 @@ populate_api_arguments(struct http_request *req)
     }
     
     if (strstr(content_type, "www-form-encoded") != NULL) {
-        if (req->method == HTTP_METHOD_POST)
+        if (req->method == HTTP_METHOD_POST) {
             return http_populate_post(req);
-        if (req->method == HTTP_METHOD_GET)
+        }
+        if (req->method == HTTP_METHOD_GET) {
             return http_populate_get(req);
+        }
     }
     
     if (strstr(content_type, "multipart") != NULL) {
