@@ -1,0 +1,6 @@
+[submodule "lib/jansson"]
+	path = lib/jansson
+	url = git@github.com:stan1y/jansson.git
+[submodule "lib/kore"]
+	path = lib/kore
+	url = git@github.com:stan1y/kore.git
