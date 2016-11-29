@@ -1,0 +1,6 @@
+*.o
+.flavor
+.objs
+photo-selector.so
+assets.h
+cert
