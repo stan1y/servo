@@ -1,21 +1,19 @@
+#ifndef _SERVO_UTIL_H_
+#define _SERVO_UTIL_H_
+
 #include <kore/kore.h>
 #include <kore/http.h>
 #include <jansson.h>
 #include "assets.h"
 
-const char*
-get_client_ipaddr(struct http_request *req);
+int servo_response(struct http_request * req, const int http_code, struct kore_buf *buf);
 
-size_t
-populate_api_arguments(struct http_request *req);
-
-int
-response_with(struct http_request * req, const int http_code, struct kore_buf *buf);
-
-int
-response_with_html(struct http_request * req, const int http_code,
+int servo_response_html(struct http_request * req, const int http_code,
                                               const void* asset_html,
                                               const size_t asset_len_html);
 
-int 
-response_with_json(struct http_request * req, const int http_code, const json_t *json);
+int servo_response_json(struct http_request * req, const int http_code, const json_t *json);
+
+int servo_response_error(struct http_request *req, const int http_code, const char* err);
+
+#endif //_SERVO_UTIL_H_

@@ -1,6 +1,8 @@
+*.swp
 *.o
+*.pem
 .flavor
 .objs
-photo-selector.so
+servo.so
 assets.h
 cert

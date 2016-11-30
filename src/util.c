@@ -4,92 +4,61 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-/**
-  * Utilities
-  */
-  
-const char*
-get_client_ipaddr(struct http_request *req)
+int servo_response(struct http_request * req,
+		   const int http_code,
+		   struct kore_buf *buf)
 {
-    static char ipaddr[INET_ADDRSTRLEN];
-    memset(ipaddr, 0, sizeof(char) * INET_ADDRSTRLEN);
-    
-    switch (req->owner->addrtype) {
-    case AF_INET:
-        /* IP is under connection->addr.ipv4 */
-        inet_ntop(AF_INET, &(req->owner->addr.ipv4), ipaddr, INET_ADDRSTRLEN);
-        break;
-    case AF_INET6:
-        /* IP is under connection->addr.ipv6 */
-        inet_ntop(AF_INET6, &(req->owner->addr.ipv6), ipaddr, INET_ADDRSTRLEN);
-        break;
-    }
-    
-    return ipaddr;
-}
-  
-  
-size_t
-populate_api_arguments(struct http_request *req)
-{
-    char * content_type = NULL;
-    
-    // default to GET arguments if nothing specified
-    if (!http_request_header(req, "content-type", &content_type))
-        return http_populate_get(req);
-
-    kore_log(LOG_NOTICE, "reading content type: %s", content_type);
-    
-    if (strstr(content_type, "application/json") != NULL) {
-        // read json body
-        return 0;
-    }
-    
-    if (strstr(content_type, "www-form-encoded") != NULL) {
-        if (req->method == HTTP_METHOD_POST) {
-            return http_populate_post(req);
-        }
-        if (req->method == HTTP_METHOD_GET) {
-            return http_populate_get(req);
-        }
-    }
-    
-    if (strstr(content_type, "multipart") != NULL) {
-        return http_populate_multipart_form(req);
-    }
-    
-    kore_log(LOG_NOTICE, "no arguments read  - failed to understand: %s",
-             content_type);
-    return 0;
-}
-
-int
-response_with(struct http_request * req, const int http_code, struct kore_buf *buf)
-{
-    http_response_header(req, "content-type", "text/html");
     http_response(req, http_code, buf->data, buf->offset);
-    kore_log(LOG_NOTICE, "responsed with code %d, wrote %d bytes", http_code, buf->offset);
+    kore_log(LOG_NOTICE, "%s: code=%d, wrote %d bytes",
+	     __FUNCTION__, http_code, buf->offset);
     return (KORE_RESULT_OK);
 }
 
-int
-response_with_html(struct http_request * req, const int http_code,
-                                              const void* asset_html,
-                                              const size_t asset_len_html)
+int servo_response_html(struct http_request * req,
+			const int http_code,
+                        const void* asset_html,
+                        const size_t asset_len_html)
 {
     struct kore_buf *buf;
     int rc;
 
     buf = kore_buf_alloc(asset_len_html);
     kore_buf_append(buf, asset_html, asset_len_html);
-    rc = response_with(req, http_code, buf);
+    http_response_header(req, "content-type", "text/html");
+    rc = servo_response(req, http_code, buf);
     kore_buf_free(buf);
 
     return rc;
 }
 
-int
-response_with_json(struct http_request * req, const int http_code, const json_t *json)
+int servo_response_json(struct http_request * req,
+	       	   	const int http_code,
+		   	const json_t *data)
 {
-    return KORE_RESULT_OK;
+    int rc;
+    struct kore_buf *buf;
+    char *json;
+
+    buf = kore_buf_alloc(2048);
+    json = json_dumps(data, JSON_ENCODE_ANY);
+    kore_buf_append(buf, json, strlen(json));
+
+    http_response_header(req, "Content-Type", "application/json");
+    rc = servo_response(req, http_code, buf);
+    kore_buf_free(buf);
+    free(json);
+    return rc;
+}
+
+int servo_response_error(struct http_request *req,
+			 const int http_code,
+			const char* err)
+{
+    int rc;
+    json_t* data;
+    
+    data = json_pack("{s:i s:s}", "code", http_code, "error", err);
+    rc = servo_response_json(req, http_code, data);
+    json_decref(data);
+    return rc;
 }
