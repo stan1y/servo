@@ -1,77 +1,69 @@
 #include "session.h"
 #include "servo.h"
+#include "util.h"
+
+int
+servo_check_origin(const char *origin);
+
+int
+servo_check_origin(const char *origin)
+{
+    return (KORE_RESULT_OK);
+}
 
 struct servo_session *
 servo_get_session(struct http_request *req)
 {
-    static char expire_at[80];
-    int cmp;
+    static char expire_on[80];
+    char *origin = NULL, *client_header = NULL, *client = NULL;
     time_t now;
-    struct servo_session *s;
-    struct servo_context *ctx;
+    struct servo_session *s = NULL;
+    struct servo_context *ctx = NULL;
 
-    ctx = req->hdlr_extra;
-    TAILQ_FOREACH(s, &ctx->sessions, list) {
-	cmp = INT_MAX;
-	if (s->addrtype == AF_INET) {
-	    cmp = s->addr.ipv4.sin_addr.s_addr - req->owner->addr.ipv4.sin_addr.s_addr;
-        }
-	if (s->addrtype == AF_INET6) {
-	    cmp = memcmp((char *) &(s->addr.ipv6.sin6_addr.s6_addr),
-		         (char *) &(req->owner->addr.ipv6.sin6_addr.s6_addr),
-	                 sizeof(s->addr.ipv6.sin6_addr));
-	}
+    if (!http_request_header(req, "Origin", &origin)) {
+	kore_log(LOG_ERR, "session refused for no origin in request");
+	return NULL;
+    }
+    if (!servo_check_origin(origin)) {
+	kore_log(LOG_ERR, "session from origin %s is forbidden", origin);
+	return NULL;
+    }
 
-	if (cmp == 0) {
-	    return s;
+    if (client == NULL && servo_read_cookie(req, "Servo-Client", &client)) {
+	kore_log(LOG_NOTICE, "session for Servo-Client=%s", client);
+    }
+
+    if (client == NULL && http_request_header(req, "X-Servo-Client", &client_header)) {
+	client = kore_strdup(client_header);
+	kore_log(LOG_NOTICE, "session for X-Servo-Client=%s", client);
+    }
+
+    if (client == NULL) {
+	kore_log(LOG_NOTICE, "creating new session");
+	// no session found, create new
+        ctx = req->hdlr_extra;
+        s = kore_malloc(sizeof(struct servo_session));
+	s->client = kore_strdup("new-session-id");
+        s->ttl = ctx->session_ttl;
+        time(&now);
+        now += s->ttl;
+        s->expire = *localtime(&now);
+        TAILQ_INSERT_TAIL(&ctx->sessions, s, list);
+    }
+    else {
+        TAILQ_FOREACH(s, &ctx->sessions, list) {
+	    if (strcmp(s->client, client) == 0)
+		break;
 	}
+	kore_free(client);
     }
     
-    // no session found, create new
-    s = kore_malloc(sizeof(struct servo_session));
-    s->addrtype = req->owner->addrtype;
-    switch (s->addrtype) {
-	default:
-	    kore_log(LOG_ERR, "%s: unsupported client familty type: %d",
-		     __FUNCTION__, s->addrtype);
-	    return NULL;
-	    break;
-	case AF_INET:
-	    s->addr.ipv4 = req->owner->addr.ipv4;
-	    break;
-	case AF_INET6:
-	    s->addr.ipv6 = req->owner->addr.ipv6;
-	    break;
+    if (s != NULL) {
+        strftime(expire_on, sizeof(expire_on), "%a %Y-%m-%d %H:%M:%S %Z", &s->expire);
+	kore_log(LOG_NOTICE, "session for %s, ttl=%d, expire on: %s",
+			     s->client, s->ttl, expire_on);
     }
-    s->ttl = ctx->session_ttl;
-    time(&now);
-    now += s->ttl;
-    s->expire_at = *localtime(&now);
-    TAILQ_INSERT_TAIL(&ctx->sessions, s, list);
-    
-    strftime(expire_at, sizeof(expire_at), "%a %Y-%m-%d %H:%M:%S %Z", &s->expire_at);
-    kore_log(LOG_NOTICE, "new session for %s, ttl=%d, expire on: %s", expire_at);
-
     return s;
 }
 
-const char *
-servo_get_client_ipaddr(struct servo_session *s)
-{
-    static char ipaddr[INET_ADDRSTRLEN];
-    memset(ipaddr, 0, sizeof(char) * INET_ADDRSTRLEN);
-
-    switch (s->addrtype) {
-    case AF_INET:
-        /* IP is under connection->addr.ipv4 */
-        inet_ntop(AF_INET, &(s->addr.ipv4), ipaddr, INET_ADDRSTRLEN);
-        break;
-    case AF_INET6:
-        /* IP is under connection->addr.ipv6 */
-        inet_ntop(AF_INET6, &(s->addr.ipv6), ipaddr, INET_ADDRSTRLEN);
-        break;
-    }
-
-    return ipaddr;
-}
 

@@ -1,8 +1,50 @@
 #include "util.h"
 
+#include <sys/param.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+int servo_read_cookie(struct http_request *req, const char *name, char **out)
+{
+    int	i, v;
+    size_t	len, slen;
+    char	*value, *c, *cookie, *cookies[HTTP_MAX_COOKIES];
+
+    if (!http_request_header(req, "cookie", &c))
+	return (KORE_RESULT_ERROR);
+
+    cookie = kore_strdup(c);
+
+    slen = strlen(name);
+    v = kore_split_string(cookie, ";", cookies, HTTP_MAX_COOKIES);
+    for (i = 0; i < v; i++) {
+	for (c = cookies[i]; isspace(*c); c++)
+	    ;
+
+	len = MIN(slen, strlen(cookies[i]));
+	if (!strncmp(c, name, len))
+	    break;
+    }
+
+    if (i == v) {
+	kore_free(cookie);
+	return (KORE_RESULT_ERROR);
+    }
+
+    c = cookies[i];
+    if ((value = strchr(c, '=')) == NULL) {
+	kore_free(cookie);
+	return (KORE_RESULT_ERROR);
+    }
+    
+    ++value;
+    if (value)
+        *out = kore_strdup(value);
+    kore_free(cookie);
+
+    return (i);
+}
 
 int servo_response(struct http_request * req,
 		   const int http_code,

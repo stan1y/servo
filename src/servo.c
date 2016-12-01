@@ -59,19 +59,17 @@ int
 servo_render_stats(struct http_request *req)
 {
     int			 rc;
-    const char		 *ipaddr;
-    char		 expire_at[80];
+    char		 expire_on[80];
     json_t		 *stats;
     struct servo_session *s;
 
     s = servo_get_session(req);
-    ipaddr = servo_get_client_ipaddr(s);
-    strftime(expire_at, sizeof(expire_at), "%a %Y-%m-%d %H:%M:%S %Z", &s->expire_at);
+    strftime(expire_on, sizeof(expire_on), "%a %Y-%m-%d %H:%M:%S %Z", &s->expire);
     
     stats = json_pack("{s:s s:i s:s}",
-		      "client", ipaddr,
+		      "client", s->client,
 		      "ttl", s->ttl,
-		      "expire_at", expire_at);
+		      "expire_on", expire_on);
     rc = servo_response_json(req, 200, stats);
     json_decref(stats);
     return rc;
