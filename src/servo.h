@@ -5,22 +5,26 @@
 #include <kore/http.h>
 #include <jansson.h>
 
-#include "storage.h"
-#include "session.h"
+#define CLIENT_LEN 255
 
-/**
- * Servo context
- */
+struct servo_session {
+    char[CLIENT_LEN] client;
+    struct tm expire;
+}
+
 struct servo_context {
-    struct servo_session_head sessions;
-    unsigned long session_ttl;
+    
+    struct kore_pgsql	 sql;
+    struct servo_session session;
+    
+    int ttl;
+    int public_mode;
 };
 
 /**
  * Alloc and initialize new servo context
  */
-struct servo_context *
-servo_init(void);
+struct servo_context *servo_init(void);
 
 
 /**
