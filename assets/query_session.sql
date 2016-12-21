@@ -1,0 +1,1 @@
+select expire_on from session where client = $1

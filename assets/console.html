@@ -1,12 +1,46 @@
 <!DOCTYPE>
 <html>
 	<head>
-		<title>Servo : Error</title>
+		<title>Servo</title>
+		<meta charset="utf-9" />
+		<meta name="description" content="Servo Console" />
+
+		<!-- Bootstrap -->
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+
+		<!-- jQuery -->
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
 	</head>
 
 	<body>
-		<div>
-			<p>Invalid request received</p>
+		<div class="container">
+			<div class="row">
+				
+				<div class="col-md-2"></div>
+				
+				<div class="col-md-4">	
+					<form class="form-horizontail">
+						<fieldset>
+							<legend>Servo Debug Console</legend>
+
+							<div class="form-group">
+								<label class="col-md-4 control-label" for="key"></label>
+								<div class="col-md-4">
+									<input class="form-control input-md" id="key" name="item-key" type="text" placeholder="<item-key>">
+									<span class="help-block">Unique item key</span>
+								</div>
+							</div>
+
+						</fieldset>
+					</form>
+				</div>
+
+				<div class="col-md-2"></div>
+			
+			</div>
 		</div>
 	</body>
+
 </html>

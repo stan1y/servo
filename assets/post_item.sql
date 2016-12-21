@@ -1,0 +1,1 @@
+insert into item (client, key, str_val, json_val, blob_val) values ($1, $2, $3, $4, $5)

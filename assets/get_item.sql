@@ -1,0 +1,1 @@
+select 'str_val', 'json_val', 'blob_val' from item where client = $1 and key = $2
