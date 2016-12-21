@@ -1,11 +1,41 @@
 #include "util.h"
+#include "assets.h"
+#include "servo.h"
 
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+static char *g_servo_config = "/home/stan/.servo/config.json";
 
-int servo_read_cookie(struct http_request *req, const char *name, char **out)
+static void servo_log_jerr(const char* fname, json_error_t *jerr)
+{
+    kore_log(LOG_ERR, "%s: %s.\n\tline: %d, column: %d, position: %d",
+             fname, jerr->text, jerr->line, jerr->column, jerr->position);
+}
+
+int servo_read_config(struct servo_config *cfg)
+{
+    json_error_t jerr;
+    json_t *json;
+
+    json = json_load_file(g_servo_config, JSON_ALLOW_NUL, &jerr);
+    if (json == NULL && jerr.text && strlen(jerr.text)) {
+        servo_log_jerr(__FUNCTION__, &jerr);
+        return (KORE_RESULT_ERROR);
+    } 
+
+    if (json_unpack_ex(json, &jerr, 0, "{s:b s:s s:i s:i s:i s:i s:i}",
+                       "public_mode", &cfg->public_mode,
+                       "connection", &cfg->connect,
+                       "session_ttl", &cfg->session_ttl,
+                       "max_sessions", &cfg->max_sessions,
+                       "string_value_size", &cfg->val_string_size,
+                       "json_value_size", &cfg->val_json_size,
+                       "blob_value_size", &cfg->val_blob_size) != 0) {
+        servo_log_jerr(__FUNCTION__, &jerr);
+        return (KORE_RESULT_ERROR);
+    }
+    return (KORE_RESULT_OK);
+}
+
+int servo_read_cookie(struct http_request *req, const char *name, char *out)
 {
     int	i, v;
     size_t	len, slen;
@@ -13,37 +43,43 @@ int servo_read_cookie(struct http_request *req, const char *name, char **out)
 
     if (!http_request_header(req, "cookie", &c))
 	return (KORE_RESULT_ERROR);
-
+    
+    out = NULL;
     cookie = kore_strdup(c);
 
     slen = strlen(name);
     v = kore_split_string(cookie, ";", cookies, HTTP_MAX_COOKIES);
     for (i = 0; i < v; i++) {
-	for (c = cookies[i]; isspace(*c); c++)
-	    ;
+    	for (c = cookies[i]; isspace(*c); c++)
+    	    ;
 
-	len = MIN(slen, strlen(cookies[i]));
-	if (!strncmp(c, name, len))
-	    break;
+    	len = MIN(slen, strlen(cookies[i]));
+    	if (!strncmp(c, name, len))
+    	    break;
     }
 
     if (i == v) {
-	kore_free(cookie);
-	return (KORE_RESULT_ERROR);
+    	kore_free(cookie);
+    	return (KORE_RESULT_ERROR);
     }
 
     c = cookies[i];
     if ((value = strchr(c, '=')) == NULL) {
-	kore_free(cookie);
-	return (KORE_RESULT_ERROR);
+    	kore_free(cookie);
+    	return (KORE_RESULT_ERROR);
     }
     
     ++value;
     if (value)
-        *out = kore_strdup(value);
+        strncpy(out, value, sizeof(out) -1);
     kore_free(cookie);
 
-    return (i);
+    return (KORE_RESULT_OK);
+}
+
+char* servo_request_str_data(struct http_request *req)
+{
+    return "Hello World!";
 }
 
 int servo_response(struct http_request * req,
