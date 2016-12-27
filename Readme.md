@@ -59,7 +59,12 @@ may want to remove saved data for cleanup/reset purposes.
 
 ## Public Mode
 
-TBD
+Servo is serving a debug console to query data using browser itself.
+
+## Releases
+
+There are no releases yet. Servo is at the concept and PoC stage now.
+Data storage engine, rules and client API contracts are prototypes. 
 
 ## License
 GNU General Public v 3.0
