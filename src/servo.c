@@ -48,7 +48,7 @@ struct http_state   servo_session_states[] = {
 /**
  * Create new servo_context
  */ 
-struct servo_context * servo_create_context(void)
+struct servo_context * servo_create_context(struct http_request *req)
 {
     struct servo_context *ctx;
 
@@ -59,8 +59,11 @@ struct servo_context * servo_create_context(void)
     /* read and write strings by default */
     ctx->in_content_type = SERVO_CONTENT_STRING;
     ctx->out_content_type = SERVO_CONTENT_STRING;
+    memset(ctx->item, 0, sizeof(ctx->item));
+    strncpy(ctx->item, req->path, sizeof(req->path) - 1);
 
-    kore_log(LOG_NOTICE, "%s: created context=%p", ctx);
+    kore_log(LOG_DEBUG, "%s: new context for item '%s'",
+             __FUNCTION__, ctx->item);
 
     return ctx;
 }
@@ -71,16 +74,28 @@ struct servo_context * servo_create_context(void)
 int servo_put_session(struct servo_session *s)
 {
     int rows = 0;
-    time_t expire_on;
     struct kore_pgsql sql;
+
+    kore_log(LOG_DEBUG, "%s: saving session=%p for client '%s'",
+                        __FUNCTION__, s, s->client);
+
+    return KORE_RESULT_OK;
+
     if (!kore_pgsql_query_init(&sql, NULL, "db", KORE_PGSQL_SYNC)) {
+        kore_log(LOG_ERR, "%s: failed to init query", __FUNCTION__);
         kore_pgsql_logerror(&sql);
         return (KORE_RESULT_ERROR);
     }
 
-    expire_on = mktime(&s->expire);
-    if (!kore_pgsql_query_params(&sql, "insert into session values ('%s', %d)", 
-                                 0, 2, s->client, expire_on)) {
+    kore_log(LOG_DEBUG, "%s: sync sql state=%d",
+                        __FUNCTION__, sql.state);
+
+    if (!kore_pgsql_query_params(&sql, 
+                                 (const char*)"insert into session values ($1, $2)", 
+                                 PGSQL_FORMAT_TEXT,
+                                 2, 
+                                 "aaa", "bbb")) {
+        kore_log(LOG_ERR, "%s: failed to run query", __FUNCTION__);
         kore_pgsql_logerror(&sql);
         return (KORE_RESULT_ERROR);
     }
@@ -98,8 +113,11 @@ int servo_put_session(struct servo_session *s)
 
 void servo_init_session(struct servo_session *s)
 {
-    time_t expire_on = time(NULL) + CONFIG->session_ttl;
-    s->expire = *gmtime(&expire_on);
+    s->expire_on = time(NULL) + CONFIG->session_ttl;
+    kore_log(LOG_DEBUG, "%s: initialized session=%p with expire_on=%d",
+                        __FUNCTION__,
+                        s,
+                        s->expire_on);
 }
 
 
@@ -116,6 +134,7 @@ int servo_init(int state)
         return (KORE_RESULT_ERROR);
     }
 
+    kore_log(LOG_NOTICE, "----- initializing pid: %d -----", (int)getpid());
     kore_log(LOG_NOTICE, "public mode: %s", CONFIG->public_mode != 0 ? "yes" : "no");
     kore_log(LOG_NOTICE, "session ttl: %d seconds", CONFIG->session_ttl);
     kore_log(LOG_NOTICE, "max sessions: %d", CONFIG->max_sessions);
@@ -137,19 +156,20 @@ int servo_start(struct http_request *req)
              __FUNCTION__, req->path);
 
     // filter by Origin header
-    if (strlen(req->path) > 0 && !http_request_header(req, "Origin", &origin)) {
+    if (strlen(req->path) > 0 && !http_request_header(req, "Origin", &origin) && !CONFIG->public_mode) {
         kore_log(LOG_ERR, "%s: no Origin header sent", __FUNCTION__);
         return servo_response_error(req, 403, "'Origin' header is not found");
     }
 
     // setup context
     if (req->hdlr_extra == NULL) {
-       req->hdlr_extra = servo_create_context();
+       req->hdlr_extra = servo_create_context(req);
        kore_log(LOG_DEBUG, "%s: set context=%p",
              __FUNCTION__, req->hdlr_extra);
     }
 
     // run state machine
+    kore_log(LOG_DEBUG, "%s: step into states", __FUNCTION__);
     return (http_state_run(servo_session_states, servo_session_states_size, req));
 }
 
@@ -158,10 +178,16 @@ int state_connect(struct http_request *req)
 {
     struct servo_context *ctx = req->hdlr_extra;
 
+    kore_log(LOG_DEBUG, "%s: started. context=%p, sql.state=%d", 
+             __FUNCTION__, ctx, ctx->sql.state);
+
     if (!kore_pgsql_query_init(&ctx->sql, req, "db", KORE_PGSQL_ASYNC)) {
+
     	/* If the state was still INIT, we'll try again later. */
     	if (ctx->sql.state == KORE_PGSQL_STATE_INIT) {
     	    req->fsm_state = REQ_STATE_CONNECT;
+            kore_log(LOG_DEBUG, "%s: retry state=%d", __FUNCTION__, 
+                     req->fsm_state);
     	    return (HTTP_STATE_RETRY);
     	}
 
@@ -169,7 +195,11 @@ int state_connect(struct http_request *req)
     	kore_pgsql_logerror(&ctx->sql);
     	req->fsm_state = REQ_STATE_ERROR;
     }
+    else {
+        req->fsm_state = REQ_STATE_Q_SESSION;
+    }
 
+    kore_log(LOG_DEBUG, "%s: continue to state=%d", __FUNCTION__, req->fsm_state);
     return (HTTP_STATE_CONTINUE);
 }
 
@@ -204,10 +234,8 @@ int state_query_session(struct http_request *req)
         strncpy(ctx->session.client, "new-client-id", sizeof(ctx->session.client) - 1);
         servo_init_session(&ctx->session);
         servo_put_session(&ctx->session);
-        kore_log(LOG_NOTICE, "%s: created session for new client '%s', expire_on=%d",
-                             __FUNCTION__,
-                             ctx->session.client,
-                             mktime(&ctx->session.expire));
+        kore_log(LOG_NOTICE, "%s: created session for new client '%s'",
+                             __FUNCTION__, ctx->session.client);
         
 
         /* handle item request with newly created session */
@@ -282,7 +310,6 @@ int state_read_session(struct http_request *req)
 {
     int rows = 0;
     char * value;
-    time_t expire_on;
     struct servo_context *ctx = req->hdlr_extra;
 
     kore_log(LOG_DEBUG, "%s: started. context=%p, sql.state=%d", 
@@ -293,20 +320,18 @@ int state_read_session(struct http_request *req)
         /* known client but no session record, expired? */
         servo_init_session(&ctx->session);
         servo_put_session(&ctx->session);
-        kore_log(LOG_DEBUG, "%s: created new session for client %s - expire_on=%d",
+        kore_log(LOG_DEBUG, "%s: recreated session for client '%s'",
                             __FUNCTION__,
-                            ctx->session.client,
-                            expire_on);
+                            ctx->session.client);
     }
     else if (rows == 1) {
         /* found existing session record */
         value = kore_pgsql_getvalue(&ctx->sql, 0, 0);
-        expire_on = kore_date_to_time(value);
-        ctx->session.expire = *gmtime(&expire_on);
+        ctx->session.expire_on = kore_date_to_time(value);
         kore_log(LOG_DEBUG, "%s: selected existing session for client %s - expire_on=%d",
                             __FUNCTION__,
                             ctx->session.client,
-                            expire_on);
+                            ctx->session.expire_on);
     }
     else {
         kore_log(LOG_ERR, "selected %d rows, 1 expected", rows);
@@ -338,6 +363,9 @@ int state_query_item(struct http_request *req)
             /* post_item.sql expects 5 arguments: 
              client, key, string, json, blob
             */
+            kore_log(LOG_DEBUG, "%s: POST item '%s' for client '%s'",
+                                __FUNCTION__, ctx->item, ctx->session.client);
+
             switch(ctx->in_content_type) {
             
                 default:
@@ -368,7 +396,7 @@ int state_query_item(struct http_request *req)
                 break;
 
                 case SERVO_CONTENT_BLOB:
-                blob_val = servo_request_blob_data(req);
+                blob_val = (void *)servo_request_str_data(req);
                 rc = kore_pgsql_query_params(&ctx->sql, 
                                     (const char*)asset_post_item_sql, 
                                     PGSQL_FORMAT_TEXT,
@@ -393,6 +421,8 @@ int state_query_item(struct http_request *req)
             /* get_item.sql expects 2 arguments:
                client, key
             */
+            kore_log(LOG_DEBUG, "%s: GET item '%s' for client '%s'",
+                                __FUNCTION__, ctx->item, ctx->session.client);
             rc = kore_pgsql_query_params(&ctx->sql, 
                                         (const char*)asset_get_item_sql, 
                                         PGSQL_FORMAT_TEXT,

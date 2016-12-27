@@ -13,7 +13,7 @@
 
 struct servo_session {
     char client[CLIENT_LEN];
-    struct tm expire;
+    time_t expire_on;
 };
 
 struct servo_config {
@@ -52,7 +52,7 @@ struct servo_context {
 };
 
 
-struct servo_context * servo_create_context(void);
+struct servo_context * servo_create_context(struct http_request *req);
 void servo_init_session(struct servo_session *s);
 int servo_put_session(struct servo_session *s);
 int servo_read_config(struct servo_config *cfg);

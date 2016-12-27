@@ -5,8 +5,10 @@ int servo_render_stats(struct http_request *req, struct servo_context *ctx)
     int			 rc;
     char		 expire_on[80];
     json_t		 *stats;
+    struct tm    *expiration;
 
-    strftime(expire_on, sizeof(expire_on), "%a %Y-%m-%d %H:%M:%S %Z", &ctx->session.expire);
+    expiration = gmtime(&ctx->session.expire_on);
+    strftime(expire_on, sizeof(expire_on), "%a %Y-%m-%d %H:%M:%S %Z", expiration);
     
     stats = json_pack("{s:s s:s}",
 		      "client", ctx->session.client,

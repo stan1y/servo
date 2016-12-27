@@ -17,9 +17,13 @@
 #define SERVO_CONTENT_JSON   1
 #define SERVO_CONTENT_BLOB   2
 
+// returns static pointer to a string of BUFSIZ
+// or NULL on error
 char * servo_request_str_data(struct http_request *req);
+
+// returns newly allocated json_t, must be freed after use
+// or NULL on error
 json_t * servo_request_json_data(struct http_request *req);
-void * servo_request_blob_data(struct http_request *req);
 
 int servo_read_cookie(struct http_request *req, const char *cookie, char* value);
 

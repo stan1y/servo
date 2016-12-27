@@ -77,11 +77,6 @@ int servo_read_cookie(struct http_request *req, const char *name, char *out)
     return (KORE_RESULT_OK);
 }
 
-char* servo_request_str_data(struct http_request *req)
-{
-    return "Hello World!";
-}
-
 int servo_response(struct http_request * req,
 		   const int http_code,
 		   struct kore_buf *buf)
@@ -139,4 +134,39 @@ int servo_response_error(struct http_request *req,
     rc = servo_response_json(req, http_code, data);
     json_decref(data);
     return rc;
+}
+
+char * servo_request_str_data(struct http_request *req)
+{
+    static char data[BUFSIZ];
+    int rc = KORE_RESULT_OK;
+
+    rc = http_body_read(req, data, sizeof(data));
+    if (rc != KORE_RESULT_OK) {
+        kore_log(LOG_ERR, "%s: failed to read request body",
+                 __FUNCTION__);
+        return NULL;
+    }
+
+    return data;
+}
+
+json_t * servo_request_json_data(struct http_request *req)
+{
+    json_error_t jerr;
+    json_t *json = NULL;
+    char *str = NULL;
+
+    str = servo_request_str_data(req);
+    if (str == NULL) {
+        return NULL;
+    }
+
+    json = json_loads(str, JSON_ALLOW_NUL, &jerr);
+    if (json == NULL) {
+        servo_log_jerr(__FUNCTION__, &jerr);
+        return NULL;
+    }
+
+    return NULL;
 }
