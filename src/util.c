@@ -47,28 +47,10 @@ int servo_read_config(struct servo_config *cfg)
     return (KORE_RESULT_OK);
 }
 
-void servo_response_cookie(struct http_request *req, const char* name, const char* val)
-{
-    char                     cookie[BUFSIZ];
-
-    memset(cookie, 0, sizeof(cookie));
-    snprintf(cookie, BUFSIZ - 1, "%s=%s;", name, val);
-    http_response_header(req, "set-cookie", cookie);
-}
-
-int servo_response(struct http_request * req,
-		   const unsigned int http_code,
-		   struct kore_buf *buf)
-{
-    http_response(req, http_code, buf->data, buf->offset);
-    return (KORE_RESULT_OK);
-}
-
-int servo_response_json(struct http_request * req,
+void servo_response_json(struct http_request * req,
 	       	const unsigned int http_code,
 		   	const json_t *data)
 {
-    int rc;
     struct kore_buf *buf;
     char *json;
 
@@ -77,23 +59,20 @@ int servo_response_json(struct http_request * req,
     kore_buf_append(buf, json, strlen(json));
 
     http_response_header(req, "content-type", "application/json");
-    rc = servo_response(req, http_code, buf);
+    http_response(req, http_code, buf->data, buf->offset);
     kore_buf_free(buf);
     free(json);
-    return rc;
 }
 
-int servo_response_error(struct http_request *req,
+void servo_response_error(struct http_request *req,
 			const unsigned int http_code,
 			const char* err)
 {
-    int rc;
     json_t* data;
     
     data = json_pack("{s:i s:s}", "code", http_code, "error", err);
-    rc = servo_response_json(req, http_code, data);
+    servo_response_json(req, http_code, data);
     json_decref(data);
-    return rc;
 }
 
 char * servo_request_str_data(struct http_request *req)

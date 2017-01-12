@@ -144,13 +144,15 @@ int servo_start(struct http_request *req)
         if (!http_request_header(req, "Origin", &origin) && !CONFIG->public_mode) {
             kore_log(LOG_NOTICE, "%s: disallow access - no 'Origin' header sent",
                 __FUNCTION__);
-            return servo_response_error(req, 403, "'Origin' header is not found");
+            servo_response_error(req, 403, "'Origin' header is not found");
+            return (KORE_RESULT_OK);
         }
         if (strcmp(origin, CONFIG->allow_origin) != 0) {
             kore_log(LOG_NOTICE, "%s: disallow access - 'Origin' header mismatch %s != %s",
                 __FUNCTION__,
                 origin, CONFIG->allow_origin);
-            return servo_response_error(req, 403, "Origin Access Denied");
+            servo_response_error(req, 403, "Origin Access Denied");
+            return (KORE_RESULT_OK);
         }
     }
 
@@ -167,7 +169,8 @@ int servo_start(struct http_request *req)
         if (strcmp(saddr, CONFIG->allow_ipaddr) != 0) {
             kore_log(LOG_NOTICE, "%s: disallow access - Client IP mismatch %s != %s",
                 __FUNCTION__, saddr, CONFIG->allow_ipaddr);
-            return servo_response_error(req, 403, "Client Access Denied");
+            servo_response_error(req, 403, "Client Access Denied");
+            return (KORE_RESULT_OK);
         }
     }
 
@@ -264,6 +267,7 @@ int state_query_session(struct http_request *req)
        make sure requestor knows it too if case we 
        had generated a new anonymous session */
     http_response_cookie(req, "Servo-Client", ctx->session.client);
+    http_response_header(req, "X-Servo-Client", ctx->session.client);
     kore_log(LOG_NOTICE, "serving client {%s}", ctx->session.client);
 
     /* check if item was requested or index */
