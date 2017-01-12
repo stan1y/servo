@@ -1,12 +1,15 @@
 #include "servo.h"
+#include "assets.h"
 
-int servo_render_stats(struct http_request *req, struct servo_context *ctx)
+int servo_render_stats(struct http_request *req)
 {
-    int			 rc;
-    char		 expire_on[80];
-    json_t		 *stats;
-    struct tm    *expiration;
+    int                      rc;
+    char                     expire_on[80];
+    json_t                  *stats;
+    struct tm               *expiration;
+    struct servo_context    *ctx;
 
+    ctx = (struct servo_context*)req->hdlr_extra;
     expiration = gmtime(&ctx->session.expire_on);
     strftime(expire_on, sizeof(expire_on), "%a %Y-%m-%d %H:%M:%S %Z", expiration);
     
@@ -18,8 +21,10 @@ int servo_render_stats(struct http_request *req, struct servo_context *ctx)
     return rc;
 }
 
-int servo_render_console(struct http_request *req, struct servo_context *ctx)
+int servo_render_console(struct http_request *req)
 {
-
+    kore_log(LOG_NOTICE, "rendering debug console");
+    http_response_header(req, "content-type", "text/html");
+    http_response(req, 200, asset_console_html, asset_len_console_html);
     return (KORE_RESULT_OK);
 }

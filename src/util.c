@@ -21,91 +21,51 @@ int servo_read_config(struct servo_config *cfg)
         return (KORE_RESULT_ERROR);
     } 
 
-    if (json_unpack_ex(json, &jerr, 0, "{s:b s:s s:i s:i s:i s:i s:i}",
+    /* Config Parameters: 
+     * "db" (required)     - [string] database connection
+     * "public_mode"       - [boolean] enable public mode
+     * "session_ttl"       - [int] session timeout in seconds
+     * "string_value_size" - [int] size of 'varchar' values column
+     * "json_value_size"   - [int] size of 'json' values column
+     * "blob_value_size"   - [int] size of 'bytea' values column
+     * "allow_origin"      - [string] enable 'Origin' header filtering and match value
+     * "allow_ipaddr"      - [string] enable client ip address filtering and match value
+     */ 
+    if (json_unpack_ex(json, &jerr, 0, "{s:s s?:b s?:i s?:i s?:i s?:i s?:i s?:s}",
+                       "db", &cfg->connect,
                        "public_mode", &cfg->public_mode,
-                       "connection", &cfg->connect,
                        "session_ttl", &cfg->session_ttl,
                        "max_sessions", &cfg->max_sessions,
                        "string_value_size", &cfg->val_string_size,
                        "json_value_size", &cfg->val_json_size,
-                       "blob_value_size", &cfg->val_blob_size) != 0) {
+                       "blob_value_size", &cfg->val_blob_size,
+                       "allow_origin", &cfg->allow_origin,
+                       "allow_ipaddr", &cfg->allow_ipaddr) != 0) {
         servo_log_jerr(__FUNCTION__, &jerr);
         return (KORE_RESULT_ERROR);
     }
     return (KORE_RESULT_OK);
 }
 
-int servo_read_cookie(struct http_request *req, const char *name, char *out)
+void servo_response_cookie(struct http_request *req, const char* name, const char* val)
 {
-    int	i, v;
-    size_t	len, slen;
-    char	*value, *c, *cookie, *cookies[HTTP_MAX_COOKIES];
+    char                     cookie[BUFSIZ];
 
-    if (!http_request_header(req, "cookie", &c))
-	return (KORE_RESULT_ERROR);
-    
-    out = NULL;
-    cookie = kore_strdup(c);
-
-    slen = strlen(name);
-    v = kore_split_string(cookie, ";", cookies, HTTP_MAX_COOKIES);
-    for (i = 0; i < v; i++) {
-    	for (c = cookies[i]; isspace(*c); c++)
-    	    ;
-
-    	len = MIN(slen, strlen(cookies[i]));
-    	if (!strncmp(c, name, len))
-    	    break;
-    }
-
-    if (i == v) {
-    	kore_free(cookie);
-    	return (KORE_RESULT_ERROR);
-    }
-
-    c = cookies[i];
-    if ((value = strchr(c, '=')) == NULL) {
-    	kore_free(cookie);
-    	return (KORE_RESULT_ERROR);
-    }
-    
-    ++value;
-    if (value)
-        strncpy(out, value, sizeof(out) -1);
-    kore_free(cookie);
-
-    return (KORE_RESULT_OK);
+    memset(cookie, 0, sizeof(cookie));
+    snprintf(cookie, BUFSIZ - 1, "%s=%s;", name, val);
+    http_response_header(req, "set-cookie", cookie);
 }
 
 int servo_response(struct http_request * req,
-		   const int http_code,
+		   const unsigned int http_code,
 		   struct kore_buf *buf)
 {
     http_response(req, http_code, buf->data, buf->offset);
-    kore_log(LOG_NOTICE, "%s: code=%d, wrote %d bytes",
-	     __FUNCTION__, http_code, buf->offset);
     return (KORE_RESULT_OK);
 }
 
-int servo_response_html(struct http_request * req,
-			const int http_code,
-                        const void* asset_html,
-                        const size_t asset_len_html)
-{
-    struct kore_buf *buf;
-    int rc;
-
-    buf = kore_buf_alloc(asset_len_html);
-    kore_buf_append(buf, asset_html, asset_len_html);
-    http_response_header(req, "content-type", "text/html");
-    rc = servo_response(req, http_code, buf);
-    kore_buf_free(buf);
-
-    return rc;
-}
-
 int servo_response_json(struct http_request * req,
-	       	   	const int http_code,
+	       	const unsigned int http_code,
 		   	const json_t *data)
 {
     int rc;
@@ -116,7 +76,7 @@ int servo_response_json(struct http_request * req,
     json = json_dumps(data, JSON_ENCODE_ANY);
     kore_buf_append(buf, json, strlen(json));
 
-    http_response_header(req, "Content-Type", "application/json");
+    http_response_header(req, "content-type", "application/json");
     rc = servo_response(req, http_code, buf);
     kore_buf_free(buf);
     free(json);
@@ -124,7 +84,7 @@ int servo_response_json(struct http_request * req,
 }
 
 int servo_response_error(struct http_request *req,
-			 const int http_code,
+			const unsigned int http_code,
 			const char* err)
 {
     int rc;

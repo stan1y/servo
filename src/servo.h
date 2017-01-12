@@ -1,6 +1,8 @@
 #ifndef _SERVO_H_
 #define _SERVO_H_
 
+#include <uuid/uuid.h>
+
 #include <kore/kore.h>
 #include <kore/http.h>
 #include <kore/pgsql.h>
@@ -37,14 +39,18 @@ struct servo_config {
 	
 	// blob value size in bytes
 	size_t val_blob_size;
+
+	// filter by Origin header
+	char *allow_origin;
+
+	// filter by Connection's ip address
+	char *allow_ipaddr;
 };
 
 struct servo_context {
     struct kore_pgsql	 sql;
     struct servo_session session;
 
-    // ID of the item we're handling
-    char item[ITEM_KEY_LEN];
     // Content-Type of received item data
     int in_content_type;
     // Content-Type expected by client
@@ -53,7 +59,6 @@ struct servo_context {
 
 
 struct servo_context * servo_create_context(struct http_request *req);
-void servo_init_session(struct servo_session *s);
 int servo_put_session(struct servo_session *s);
 int servo_read_config(struct servo_config *cfg);
 
@@ -70,9 +75,9 @@ int servo_init(int state);
 int servo_start(struct http_request *);
 
 /* Render JSON stats to API clients */
-int servo_render_stats(struct http_request *req, struct servo_context *);
+int servo_render_stats(struct http_request *req);
 
 /* Render Debug console */
-int servo_render_console(struct http_request *req, struct servo_context *);
+int servo_render_console(struct http_request *req);
 
 #endif //_SERVO_H_
