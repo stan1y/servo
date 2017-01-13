@@ -28,17 +28,8 @@ struct servo_config {
 	// global session TTL
 	size_t session_ttl;
 
-	// total max of active sesions
+	// total number of stored sessions
 	size_t max_sessions;
-	
-	// raw string value size
-	size_t val_string_size;
-	
-	// json value size
-	size_t val_json_size;
-	
-	// blob value size in bytes
-	size_t val_blob_size;
 
 	// filter by Origin header
 	char *allow_origin;
@@ -51,12 +42,15 @@ struct servo_context {
     struct kore_pgsql	 sql;
     struct servo_session session;
 
-    // Content-Type of received item data
+    /* IN and OUT options of Content-Type */
     int in_content_type;
-    // Content-Type expected by client
     int out_content_type;
-};
 
+    /* Requested item data */
+    char	*str_val;
+    json_t	*json_val;
+    void	*blob_val;
+};
 
 struct servo_context * servo_create_context(struct http_request *req);
 int servo_put_session(struct servo_session *s);

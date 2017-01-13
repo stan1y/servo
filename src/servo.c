@@ -5,36 +5,45 @@
 /**
  * Session API states
  */ 
-static int	state_connect(struct http_request *);
+static int	state_connect_session(struct http_request *);
 static int	state_query_session(struct http_request *);
 static int  state_wait_session(struct http_request *);
 static int  state_read_session(struct http_request *);
+
+static int  state_connect_item(struct http_request *);
 static int	state_query_item(struct http_request *);
 static int	state_wait_item(struct http_request *);
 static int  state_read_item(struct http_request *);
 static int	state_error(struct http_request *);
 static int	state_done(struct http_request *);
 
+static int  servo_connect_db(struct http_request *, int, int, int);
+static int  servo_wait(struct http_request *, int, int, int);
+
 static struct servo_config *CONFIG;
 
-#define REQ_STATE_CONNECT       0
+#define REQ_STATE_C_SESSION     0
 #define REQ_STATE_Q_SESSION     1
 #define REQ_STATE_W_SESSION     2
 #define REQ_STATE_R_SESSION     3
-#define REQ_STATE_Q_ITEM        4
-#define REQ_STATE_W_ITEM        5
-#define REQ_STATE_R_ITEM        6
-#define REQ_STATE_ERROR         7
-#define REQ_STATE_DONE          8
+#define REQ_STATE_C_ITEM        4
+#define REQ_STATE_Q_ITEM        5
+#define REQ_STATE_W_ITEM        6
+#define REQ_STATE_R_ITEM        7
+#define REQ_STATE_ERROR         8
+#define REQ_STATE_DONE          9
 
 struct http_state   servo_session_states[] = {
-    { "REQ_STATE_CONNECT",	  state_connect },
+    { "REQ_STATE_C_SESSION",  state_connect_session },
     { "REQ_STATE_Q_SESSION",  state_query_session },
     { "REQ_STATE_W_SESSION",  state_wait_session },
     { "REQ_STATE_R_SESSION",  state_read_session },
+
+    { "REQ_STATE_C_ITEM",     state_connect_item },
     { "REQ_STATE_Q_ITEM",	  state_query_item },
     { "REQ_STATE_W_ITEM",	  state_wait_item },
     { "REQ_STATE_R_ITEM",     state_read_item },
+
     { "REQ_STATE_ERROR",      state_error },
     { "REQ_STATE_DONE",		  state_done },
 };
@@ -88,7 +97,8 @@ int servo_put_session(struct servo_session *s)
         kore_pgsql_logerror(&sql);
         return (KORE_RESULT_ERROR);
     }
-    
+
+    kore_pgsql_cleanup(&sql);
     kore_log(LOG_NOTICE, "created session %s", s->client);
     return (KORE_RESULT_OK);
 }
@@ -105,9 +115,7 @@ int servo_init(int state)
     /* Configuration defaults */
     CONFIG->public_mode = 0;
     CONFIG->session_ttl = 300;
-    CONFIG->val_string_size = 1024;
-    CONFIG->val_json_size = 1024;
-    CONFIG->val_blob_size = 1024000;
+    CONFIG->max_sessions = 10;
     CONFIG->allow_origin = NULL;
     CONFIG->allow_ipaddr = NULL;
 
@@ -181,34 +189,44 @@ int servo_start(struct http_request *req)
     return (http_state_run(servo_session_states, servo_session_states_size, req));
 }
 
-/* Connect to database */
-int state_connect(struct http_request *req)
+int
+servo_connect_db(struct http_request *req, int retry_step, int success_step, int error_step)
 {
     struct servo_context *ctx = req->hdlr_extra;
 
     if (!kore_pgsql_query_init(&ctx->sql, req, "db", KORE_PGSQL_ASYNC)) {
 
-    	/* If the state was still INIT, we'll try again later. */
-    	if (ctx->sql.state == KORE_PGSQL_STATE_INIT) {
-    	    req->fsm_state = REQ_STATE_CONNECT;
-            kore_log(LOG_DEBUG, "%s: retry state=%d", __FUNCTION__, 
-                     req->fsm_state);
-    	    return (HTTP_STATE_RETRY);
-    	}
+        /* If the state was still INIT, we'll try again later. */
+        if (ctx->sql.state == KORE_PGSQL_STATE_INIT) {
+            req->fsm_state = retry_step;
+            kore_log(LOG_DEBUG, "retrying db connection...");
+            return (HTTP_STATE_RETRY);
+        }
 
         /* Different state means error */
-    	kore_pgsql_logerror(&ctx->sql);
-    	req->fsm_state = REQ_STATE_ERROR;
+        kore_pgsql_logerror(&ctx->sql);
+        req->fsm_state = error_step;
     }
     else {
-        req->fsm_state = REQ_STATE_Q_SESSION;
+        req->fsm_state = success_step;
+        kore_log(LOG_DEBUG, "connected to db -> (%d)",
+            req->fsm_state);
     }
 
     return (HTTP_STATE_CONTINUE);
 }
 
-/* Select session for a client */
-int state_query_session(struct http_request *req)
+int
+state_connect_session(struct http_request *req)
+{
+    return servo_connect_db(req, 
+                            REQ_STATE_C_SESSION,
+                            REQ_STATE_Q_SESSION,
+                            REQ_STATE_ERROR);
+}
+
+int
+state_query_session(struct http_request *req)
 {
     int                      rc = KORE_RESULT_OK;
     struct servo_context    *ctx = req->hdlr_extra;
@@ -237,8 +255,8 @@ int state_query_session(struct http_request *req)
         uuid_unparse(cid, ctx->session.client);
         ctx->session.expire_on = time(NULL) + CONFIG->session_ttl;
         
-        /* Proceed to REQ_STATE_Q_ITEM with newly created session */
-        req->fsm_state = REQ_STATE_Q_ITEM;
+        /* Proceed to REQ_STATE_C_ITEM with newly created session */
+        req->fsm_state = REQ_STATE_C_ITEM;
         if (!servo_put_session(&ctx->session)) {
             req->fsm_state = REQ_STATE_ERROR;
         }
@@ -291,39 +309,30 @@ int state_query_session(struct http_request *req)
     return HTTP_STATE_CONTINUE; 
 }
 
-/* Wait for session query completition
-   sends to REQ_STATE_R_SESSION for session 
-   state population from DB, orproceed to 
-   REQ_STATE_Q_ITEM when query completes.
- */
-int state_wait_session(struct http_request *req)
+int
+servo_wait(struct http_request *req, int read_step, int complete_step, int error_step)
 {
     struct servo_context *ctx = req->hdlr_extra;
-
-    kore_log(LOG_DEBUG, "%s: started. context=%p, sql.state=%d", 
-        __FUNCTION__, ctx, ctx->sql.state);
 
     switch (ctx->sql.state) {
     case KORE_PGSQL_STATE_WAIT:
         /* keep waiting */
+        kore_log(LOG_DEBUG, "wating...");
         return (HTTP_STATE_RETRY);
 
     case KORE_PGSQL_STATE_COMPLETE:
-        /* session query has completed
-         * proceed to REQ_STATE_Q_ITEM
-         */
-        req->fsm_state = REQ_STATE_Q_ITEM;
-        break;
-
-    case KORE_PGSQL_STATE_ERROR:
-        /* report error and exit state machine */
-        req->fsm_state = REQ_STATE_ERROR;
-        kore_pgsql_logerror(&ctx->sql);
+        kore_log(LOG_DEBUG, "complete -> (%d)", complete_step);
+        req->fsm_state = complete_step;
         break;
 
     case KORE_PGSQL_STATE_RESULT:
-        /* data received, read it */
-        req->fsm_state = REQ_STATE_R_SESSION;
+        kore_log(LOG_DEBUG, "reading... -> (%d)", read_step);
+        req->fsm_state = read_step;
+        break;
+
+    case KORE_PGSQL_STATE_ERROR:
+        req->fsm_state = error_step;
+        kore_pgsql_logerror(&ctx->sql);
         break;
 
     default:
@@ -332,21 +341,29 @@ int state_wait_session(struct http_request *req)
         break;
     }
 
-    kore_log(LOG_DEBUG, "%s: complete. context=%p, sql.state=%d, next=%d", 
-        __FUNCTION__, ctx, ctx->sql.state, req->fsm_state);
-
     return (HTTP_STATE_CONTINUE);
+}
+
+int
+state_wait_session(struct http_request *req)
+{
+    return servo_wait(req, REQ_STATE_R_SESSION,
+                           REQ_STATE_C_ITEM,
+                           REQ_STATE_ERROR);
 }
 
 /* Handle session query data fetch */
 int state_read_session(struct http_request *req)
 {
-    int rows = 0;
-    char * value;
-    struct servo_context *ctx = req->hdlr_extra;
+    int                      rows;
+    char                    *value;
+    struct servo_context    *ctx;
+    time_t                   now;
 
-    kore_log(LOG_DEBUG, "%s: started. context=%p, sql.state=%d", 
-             __FUNCTION__, ctx, ctx->sql.state);
+
+    rows = 0;
+    now = time(NULL);
+    ctx = (struct servo_context*)req->hdlr_extra;
 
     rows = kore_pgsql_ntuples(&ctx->sql);
     if (rows == 0) {
@@ -363,10 +380,13 @@ int state_read_session(struct http_request *req)
         /* found existing session record */
         value = kore_pgsql_getvalue(&ctx->sql, 0, 0);
         ctx->session.expire_on = kore_date_to_time(value);
-        kore_log(LOG_DEBUG, "%s: selected existing session for client %s - expire_on=%d",
-                            __FUNCTION__,
+        if (now >= ctx->session.expire_on) {
+            kore_log(LOG_NOTICE, "expired session {%s}", ctx->session.client);
+        }
+        else 
+            kore_log(LOG_NOTICE, "existing session {%s}, expires on: %s",
                             ctx->session.client,
-                            ctx->session.expire_on);
+                            value);
     }
     else {
         kore_log(LOG_ERR, "selected %d rows, 1 expected", rows);
@@ -378,91 +398,105 @@ int state_read_session(struct http_request *req)
 
     /* Back to our DB waiting state. */
     req->fsm_state = REQ_STATE_W_SESSION;
-    kore_log(LOG_DEBUG, "%s: continue waiting", __FUNCTION__);
     return (HTTP_STATE_CONTINUE);
 }
 
-/* Get/Post/Put/Delete item */
+int
+state_connect_item(struct http_request *req)
+{
+    return servo_connect_db(req,
+                            REQ_STATE_C_ITEM,
+                            REQ_STATE_Q_ITEM,
+                            REQ_STATE_ERROR);
+}
+
 int state_query_item(struct http_request *req)
 {
-    int rc = KORE_RESULT_OK;
-    struct servo_context *ctx = req->hdlr_extra;
-    char *str_val;
-    json_t *json_val;
-    void *blob_val;
+    int                      rc;
+    struct servo_context    *ctx;
+    char                    *str_val;
+    json_t                  *json_val;
+    void                    *blob_val;
+
+    rc = KORE_RESULT_OK;
+    ctx = (struct servo_context*)req->hdlr_extra;
 
     switch(req->method) {
         case HTTP_METHOD_POST:
             /* post_item.sql expects 5 arguments: 
              client, key, string, json, blob
             */
-            kore_log(LOG_NOTICE, "{%s} POST %s",
-                ctx->session.client, req->path);
+            kore_log(LOG_NOTICE, "POST %s for {%s}",
+                req->path, ctx->session.client);
 
             switch(ctx->in_content_type) {
-            
                 default:
                 case SERVO_CONTENT_STRING:
-                str_val = servo_request_str_data(req);
-                rc = kore_pgsql_query_params(&ctx->sql, 
-                                    (const char*)asset_post_item_sql, 
-                                    PGSQL_FORMAT_TEXT,
-                                    5,
-                                    ctx->session.client,
-                                    req->path,
-                                    str_val,
-                                    "NULL",
-                                    "NULL");
-                break;
+                    str_val = servo_request_str_data(req);
+                    rc = kore_pgsql_query_params(&ctx->sql, 
+                                        (const char*)asset_post_item_sql, 
+                                        PGSQL_FORMAT_TEXT,
+                                        5,
+                                        ctx->session.client,
+                                        req->path,
+                                        str_val,
+                                        "NULL",
+                                        "NULL");
+                    break;
 
                 case SERVO_CONTENT_JSON:
-                json_val = servo_request_json_data(req);
-                rc = kore_pgsql_query_params(&ctx->sql, 
-                                    (const char*)asset_post_item_sql, 
-                                    PGSQL_FORMAT_TEXT,
-                                    5,
-                                    ctx->session.client,
-                                    req->path,
-                                    "NULL",
-                                    json_dumps(json_val, JSON_ENCODE_ANY),
-                                    "NULL");
-                break;
+                    json_val = servo_request_json_data(req);
+                    rc = kore_pgsql_query_params(&ctx->sql, 
+                                        (const char*)asset_post_item_sql, 
+                                        PGSQL_FORMAT_TEXT,
+                                        5,
+                                        ctx->session.client,
+                                        req->path,
+                                        "NULL",
+                                        json_dumps(json_val, JSON_ENCODE_ANY),
+                                        "NULL");
+                    break;
 
                 case SERVO_CONTENT_BLOB:
-                blob_val = (void *)servo_request_str_data(req);
-                rc = kore_pgsql_query_params(&ctx->sql, 
-                                    (const char*)asset_post_item_sql, 
-                                    PGSQL_FORMAT_TEXT,
-                                    5,
-                                    ctx->session.client,
-                                    req->path,
-                                    "NULL",
-                                    "NULL",
-                                    (const char*)blob_val);
-                break;
+                    blob_val = (void *)servo_request_str_data(req);
+                    rc = kore_pgsql_query_params(&ctx->sql, 
+                                        (const char*)asset_post_item_sql, 
+                                        PGSQL_FORMAT_TEXT,
+                                        5,
+                                        ctx->session.client,
+                                        req->path,
+                                        "NULL",
+                                        "NULL",
+                                        (const char*)blob_val);
+                    break;
             } 
-        break;
+            break;
 
         case HTTP_METHOD_PUT:
-        break;
+            break;
 
         case HTTP_METHOD_DELETE:
-        break;
+            break;
 
         default:
         case HTTP_METHOD_GET:
-            /* get_item.sql expects 2 arguments:
-               client, key
-            */
-            kore_log(LOG_NOTICE, "{%s} GET %s",
-                ctx->session.client, req->path);
+            /* get_item.sql
+             * $1 - client id
+             * $2 - item key 
+             */
+            kore_log(LOG_NOTICE, "GET %s for {%s}",
+                req->path, ctx->session.client);
             rc = kore_pgsql_query_params(&ctx->sql, 
                                         (const char*)asset_get_item_sql, 
                                         PGSQL_FORMAT_TEXT,
                                         2,
                                         ctx->session.client,
-                                        req->path);
-        break;
+                                        strlen(ctx->session.client),
+                                        PGSQL_FORMAT_TEXT,
+                                        req->path,
+                                        strlen(req->path),
+                                        PGSQL_FORMAT_TEXT);
+            break;
     }
 
     if (rc != KORE_RESULT_OK) {
@@ -470,29 +504,54 @@ int state_query_item(struct http_request *req)
         return HTTP_STATE_ERROR;
     }
 
+    /* Wait for item request completition */
+    req->fsm_state = REQ_STATE_W_ITEM;
     return HTTP_STATE_CONTINUE;
 }
 
 int state_wait_item(struct http_request *req)
 {
-    int rc = KORE_RESULT_OK;
-    struct servo_context *ctx = req->hdlr_extra;
-
-    kore_log(LOG_DEBUG, "%s: started. context=%p", 
-        __FUNCTION__, ctx);
-
-    return rc;
+    return servo_wait(req, REQ_STATE_R_ITEM,
+                           REQ_STATE_DONE,
+                           REQ_STATE_ERROR);
 }
 
 int state_read_item(struct http_request *req)
 {
-    int rc = KORE_RESULT_OK;
-    struct servo_context *ctx = req->hdlr_extra;
+    int                      rows;               
+    struct servo_context    *ctx;
+    static char             *not_found = "Item not found";
 
-    kore_log(LOG_DEBUG, "%s: started. context=%p", 
-        __FUNCTION__, ctx);
+    rows = 0;
+    ctx = (struct servo_context*)req->hdlr_extra;
 
-    return rc;
+    rows = kore_pgsql_ntuples(&ctx->sql);
+    if (rows == 0 && req->method == HTTP_METHOD_GET) {
+        /* item was not found, report 404 */
+        kore_log(LOG_NOTICE, "%s: no item found for key \"%s\"",
+            __FUNCTION__, req->path);
+
+        http_response(req, 404, not_found, strlen(not_found));
+        return HTTP_STATE_COMPLETE;
+    }
+    else if (rows == 1) {
+        /* found existing session record */
+        ctx->str_val = kore_pgsql_getvalue(&ctx->sql, 0, 0);
+        ctx->json_val = kore_pgsql_getvalue(&ctx->sql, 0, 1);
+        ctx->blob_val = kore_pgsql_getvalue(&ctx->sql, 0, 2);
+        kore_log(LOG_NOTICE, "%s: reading...");
+    }
+    else {
+        kore_log(LOG_ERR, "selected %d rows, 1 expected", rows);
+        return (HTTP_STATE_ERROR);  
+    }
+
+    /* Continue processing our query results. */
+    kore_pgsql_continue(req, &ctx->sql);
+
+    /* Back to our DB waiting state. */
+    req->fsm_state = REQ_STATE_W_SESSION;
+    return (HTTP_STATE_CONTINUE);
 }
 
 /* An error occurred. */

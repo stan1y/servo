@@ -1,0 +1,3 @@
+[servo]
+database = "host=localhost database=servodb user=servo password=test"
+public_mode = 1

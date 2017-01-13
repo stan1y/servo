@@ -3,10 +3,15 @@
 
 #include <stdio.h>
 #include <ctype.h>
+#include <unistd.h>
+
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <linux/limits.h>
 
 #include <kore/kore.h>
 #include <kore/http.h>

@@ -1,47 +1,58 @@
 #include "util.h"
 #include "assets.h"
 #include "servo.h"
+#include "ini.h"
 
-static char *g_servo_config = "/home/stan/.servo/config.json";
+static char *g_servo_config = "%s/.servo/config";
 
-static void servo_log_jerr(const char* fname, json_error_t *jerr)
+#define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
+
+static int servo_read_config_handler(void* user, const char* section, const char* name,
+    const char* value)
 {
-    kore_log(LOG_ERR, "%s: %s.\n\tline: %d, column: %d, position: %d",
-             fname, jerr->text, jerr->line, jerr->column, jerr->position);
+    struct servo_config *cfg;
+
+    cfg = (struct servo_config *)user;
+    if (MATCH("servo", "public_mode")) {
+        cfg->public_mode = atoi(value);
+    } else if (MATCH("servo", "session_ttl")) {
+        cfg->session_ttl = atoi(value);
+    } else if (MATCH("servo", "database")) {
+        cfg->connect = kore_strdup(value);
+    } else if (MATCH("filter", "origin")) {
+        cfg->allow_origin = kore_strdup(value);
+    } else if (MATCH("filter", "ip_address")) {
+        cfg->allow_ipaddr = kore_strdup(value);
+    }
+    else {
+        kore_log(LOG_ERR, "unknown option \"%s.%s\"",
+            section, name);
+    }
+
+    return 1;
 }
 
 int servo_read_config(struct servo_config *cfg)
 {
-    json_error_t jerr;
-    json_t *json;
+    struct stat      st;
+    char             path[PATH_MAX];
+    char            *home;
+    
+    home = getenv("HOME");
+    if (home == NULL || strlen(home) == 0)
+        home = ".";
 
-    json = json_load_file(g_servo_config, JSON_ALLOW_NUL, &jerr);
-    if (json == NULL && jerr.text && strlen(jerr.text)) {
-        servo_log_jerr(__FUNCTION__, &jerr);
+    snprintf(path, PATH_MAX, g_servo_config, home);
+    kore_log(LOG_DEBUG, "reading %s", path);
+
+    if (stat(path, &st) != 0) {
+        kore_log(LOG_ERR, "no configuration file found at %s",
+            path);
         return (KORE_RESULT_ERROR);
-    } 
+    }
 
-    /* Config Parameters: 
-     * "db" (required)     - [string] database connection
-     * "public_mode"       - [boolean] enable public mode
-     * "session_ttl"       - [int] session timeout in seconds
-     * "string_value_size" - [int] size of 'varchar' values column
-     * "json_value_size"   - [int] size of 'json' values column
-     * "blob_value_size"   - [int] size of 'bytea' values column
-     * "allow_origin"      - [string] enable 'Origin' header filtering and match value
-     * "allow_ipaddr"      - [string] enable client ip address filtering and match value
-     */ 
-    if (json_unpack_ex(json, &jerr, 0, "{s:s s?:b s?:i s?:i s?:i s?:i s?:i s?:s}",
-                       "db", &cfg->connect,
-                       "public_mode", &cfg->public_mode,
-                       "session_ttl", &cfg->session_ttl,
-                       "max_sessions", &cfg->max_sessions,
-                       "string_value_size", &cfg->val_string_size,
-                       "json_value_size", &cfg->val_json_size,
-                       "blob_value_size", &cfg->val_blob_size,
-                       "allow_origin", &cfg->allow_origin,
-                       "allow_ipaddr", &cfg->allow_ipaddr) != 0) {
-        servo_log_jerr(__FUNCTION__, &jerr);
+    if (ini_parse(path, servo_read_config_handler, cfg) < 0) {
+        kore_log(LOG_ERR, "failed to parse configuration.");
         return (KORE_RESULT_ERROR);
     }
     return (KORE_RESULT_OK);
@@ -88,6 +99,13 @@ char * servo_request_str_data(struct http_request *req)
     }
 
     return data;
+}
+
+static void
+servo_log_jerr(const char* fname, const json_error_t *jerr)
+{
+    kore_log(LOG_ERR, "%s: %s.\n\tline: %d, column: %d, position: %d",
+             fname, jerr->text, jerr->line, jerr->column, jerr->position);
 }
 
 json_t * servo_request_json_data(struct http_request *req)
