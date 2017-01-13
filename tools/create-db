@@ -1,3 +1,3 @@
 #!/bin/bash
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DIR="$( dirname "${BASH_SOURCE[0]}" )"
 sudo su postgres -c "psql < $DIR/create-db.sql"

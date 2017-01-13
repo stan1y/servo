@@ -1,0 +1,6 @@
+#!/bin/bash
+DIR="$( dirname "${BASH_SOURCE[0]}" )"
+SERVO="$( realpath "${DIR}/.." )"
+
+cd $SERVO
+ls -d ./src/* ./assets/* | entr -r sh -c "kore clean && kore run"
