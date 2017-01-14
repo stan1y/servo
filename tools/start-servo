@@ -1,0 +1,2 @@
+#!/bin/bash
+kore -c /usr/local/servo/conf/kore.conf
