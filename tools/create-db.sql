@@ -10,7 +10,7 @@ create table session (
 create table item (
 	client		varchar(36) references session (client),
 	key			varchar(255),
-	str_val		varchar(1024),
+	str_val		text,
 	json_val	json,
 	blob_val	bytea
 );
