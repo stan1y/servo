@@ -48,6 +48,19 @@ struct http_state   servo_session_states[] = {
     { "REQ_STATE_DONE",		  state_done },
 };
 
+#define STATE_NAME(s) servo_session_states[s].name
+#define REQ_STATE(req) STATE_NAME(req->fsm_state)
+
+char    *SQL_STATE_NAMES[] = {
+    "<null>",   // NULL
+    "init",     // KORE_PGSQL_STATE_INIT
+    "wait",     // KORE_PGSQL_STATE_WAIT
+    "result",   // KORE_PGSQL_STATE_RESULT
+    "error",    // KORE_PGSQL_STATE_ERROR
+    "done",     // KORE_PGSQL_STATE_DONE
+    "complete"  // KORE_PGSQL_STATE_COMPLETE
+};
+
 #define servo_session_states_size (sizeof(servo_session_states) / sizeof(servo_session_states[0]))
 
 /* PGSQL result formats */
@@ -63,6 +76,7 @@ struct servo_context * servo_create_context(struct http_request *req)
 
     ctx = kore_malloc(sizeof(struct servo_context));
     memset(ctx->session.client, 0, sizeof(ctx->session.client));
+    memset(&ctx->sql, 0, sizeof(struct kore_pgsql));
 
     /* read and write strings by default */
     ctx->in_content_type = SERVO_CONTENT_STRING;
@@ -116,22 +130,25 @@ int servo_init(int state)
     CONFIG->public_mode = 0;
     CONFIG->session_ttl = 300;
     CONFIG->max_sessions = 10;
+    CONFIG->string_size = 255;
+    CONFIG->json_size = 1024;
+    CONFIG->blob_size = 4096;
     CONFIG->allow_origin = NULL;
     CONFIG->allow_ipaddr = NULL;
 
     if (!servo_read_config(CONFIG)) {
-        kore_log(LOG_ERR, "%s: failed to read config", __FUNCTION__);
+        kore_log(LOG_ERR, "%s: servo is not configured", __FUNCTION__);
         return (KORE_RESULT_ERROR);
     }
 
-    kore_log(LOG_NOTICE, "initializing pid: %d", (int)getpid());
-    kore_log(LOG_NOTICE, "public mode: %s", CONFIG->public_mode != 0 ? "yes" : "no");
-    kore_log(LOG_NOTICE, "session ttl: %d seconds", CONFIG->session_ttl);
-    kore_log(LOG_NOTICE, "max sessions: %d", CONFIG->max_sessions);
+    kore_log(LOG_NOTICE, "started worker pid: %d", (int)getpid());
+    kore_log(LOG_NOTICE, "  public mode: %s", CONFIG->public_mode != 0 ? "yes" : "no");
+    kore_log(LOG_NOTICE, "  session ttl: %d seconds", CONFIG->session_ttl);
+    kore_log(LOG_NOTICE, "  max sessions: %d", CONFIG->max_sessions);
     if (CONFIG->allow_origin != NULL)
-        kore_log(LOG_NOTICE, "allow origin: %s", CONFIG->allow_origin);
+        kore_log(LOG_NOTICE, "  allow origin: %s", CONFIG->allow_origin);
     if (CONFIG->allow_ipaddr != NULL)
-        kore_log(LOG_NOTICE, "allow ip address: %s", CONFIG->allow_ipaddr);
+        kore_log(LOG_NOTICE, "  allow ip address: %s", CONFIG->allow_ipaddr);
     
     kore_pgsql_register("db", CONFIG->connect);
     
@@ -193,7 +210,11 @@ int
 servo_connect_db(struct http_request *req, int retry_step, int success_step, int error_step)
 {
     struct servo_context *ctx = req->hdlr_extra;
+    
+    kore_log(LOG_DEBUG, "connecting... (currerly %s)",
+        SQL_STATE_NAMES[ctx->sql.state]);
 
+    kore_pgsql_cleanup(&ctx->sql);
     if (!kore_pgsql_query_init(&ctx->sql, req, "db", KORE_PGSQL_ASYNC)) {
 
         /* If the state was still INIT, we'll try again later. */
@@ -209,8 +230,7 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
     }
     else {
         req->fsm_state = success_step;
-        kore_log(LOG_DEBUG, "connected to db -> (%d)",
-            req->fsm_state);
+        kore_log(LOG_DEBUG, "connected to db -> (%s)", REQ_STATE(req));
     }
 
     return (HTTP_STATE_CONTINUE);
@@ -412,15 +432,44 @@ state_connect_item(struct http_request *req)
 
 int state_query_item(struct http_request *req)
 {
-    int                      rc;
+    int                      rc, too_big;
     struct servo_context    *ctx;
+    struct kore_buf         *body;
     char                    *str_val;
     json_t                  *json_val;
     void                    *blob_val;
+    size_t                   req_size;
 
     rc = KORE_RESULT_OK;
     ctx = (struct servo_context*)req->hdlr_extra;
+    body = servo_request_data(req);
 
+    /* Check size limitations */
+    too_big = 0;
+    switch(ctx->in_content_type) {
+        default:
+        case SERVO_CONTENT_STRING:
+            if (body->offset > CONFIG->string_size) {
+                too_big = 1;
+            }
+            break;
+        case SERVO_CONTENT_JSON:
+            if (body->offset > CONFIG->json_size) {
+                too_big = 1;
+            }
+            break;
+        case SERVO_CONTENT_BLOB:
+            if (body->offset > CONFIG->blob_size) {
+                too_big = 1;
+            }
+            break;
+    };
+    if (too_big) {
+        http_response(403, "Request is too large");
+                req->fsm_state = REQ_STATE_DONE;
+    }
+
+    /* Handle item operation in http method */
     switch(req->method) {
         case HTTP_METHOD_POST:
             /* post_item.sql expects 5 arguments: 
@@ -432,29 +481,38 @@ int state_query_item(struct http_request *req)
             switch(ctx->in_content_type) {
                 default:
                 case SERVO_CONTENT_STRING:
-                    str_val = servo_request_str_data(req);
+                    str_val = kore_buff_stringify(buf, NULL);
                     rc = kore_pgsql_query_params(&ctx->sql, 
                                         (const char*)asset_post_item_sql, 
                                         PGSQL_FORMAT_TEXT,
                                         5,
                                         ctx->session.client,
+                                        strlen(ctx->session.client),
+                                        PGSQL_FORMAT_TEXT,
                                         req->path,
-                                        str_val,
-                                        "NULL",
-                                        "NULL");
+                                        strlen(req->path),
+                                        PGSQL_FORMAT_TEXT,
+                                        PGSQL_FORMAT_TEXT, str_val, strlen(str_val),
+                                        PGSQL_FORMAT_TEXT, NULL, 0,
+                                        PGSQL_FORMAT_TEXT, NULL, 0);
                     break;
 
                 case SERVO_CONTENT_JSON:
-                    json_val = servo_request_json_data(req);
+                    json_sval = kore_buff_stringify(buf, NULL);
+                    json_val = json_loads(json_sval, JSON_ALLOW_NUL);
                     rc = kore_pgsql_query_params(&ctx->sql, 
                                         (const char*)asset_post_item_sql, 
                                         PGSQL_FORMAT_TEXT,
                                         5,
                                         ctx->session.client,
+                                        strlen(ctx->session.client),
+                                        PGSQL_FORMAT_TEXT,
                                         req->path,
-                                        "NULL",
-                                        json_dumps(json_val, JSON_ENCODE_ANY),
-                                        "NULL");
+                                        strlen(req->path),
+                                        PGSQL_FORMAT_TEXT,
+                                        PGSQL_FORMAT_TEXT, NULL, 0,
+                                        PGSQL_FORMAT_TEXT, json_sval, strlen(json_sval),
+                                        PGSQL_FORMAT_TEXT, NULL, 0);
                     break;
 
                 case SERVO_CONTENT_BLOB:
@@ -463,11 +521,17 @@ int state_query_item(struct http_request *req)
                                         (const char*)asset_post_item_sql, 
                                         PGSQL_FORMAT_TEXT,
                                         5,
+                                        2,
                                         ctx->session.client,
+                                        strlen(ctx->session.client),
+                                        PGSQL_FORMAT_TEXT,
                                         req->path,
-                                        "NULL",
-                                        "NULL",
-                                        (const char*)blob_val);
+                                        strlen(req->path),
+                                        PGSQL_FORMAT_TEXT,
+                                        PGSQL_FORMAT_TEXT, NULL, 0,
+                                        PGSQL_FORMAT_TEXT, NULL, 0,
+                                        PGSQL_FORMAT_TEXT,
+                                        PGSQL_FORMAT_TEXT, (const char *)blob_val, buf.offset);
                     break;
             } 
             break;
@@ -520,7 +584,9 @@ int state_read_item(struct http_request *req)
 {
     int                      rows;               
     struct servo_context    *ctx;
+    char                    *val;
     static char             *not_found = "Item not found";
+    json_error_t            jerr;
 
     rows = 0;
     ctx = (struct servo_context*)req->hdlr_extra;
@@ -528,16 +594,24 @@ int state_read_item(struct http_request *req)
     rows = kore_pgsql_ntuples(&ctx->sql);
     if (rows == 0 && req->method == HTTP_METHOD_GET) {
         /* item was not found, report 404 */
-        kore_log(LOG_NOTICE, "%s: no item found for key \"%s\"",
-            __FUNCTION__, req->path);
-
+        kore_log(LOG_NOTICE, "no item found for key \"%s\"", req->path);
         http_response(req, 404, not_found, strlen(not_found));
-        return HTTP_STATE_COMPLETE;
+        req->fsm_state = REQ_STATE_DONE;
+        return HTTP_STATE_CONTINUE;
     }
     else if (rows == 1) {
         /* found existing session record */
-        ctx->str_val = kore_pgsql_getvalue(&ctx->sql, 0, 0);
-        ctx->json_val = kore_pgsql_getvalue(&ctx->sql, 0, 1);
+        val = kore_pgsql_getvalue(&ctx->sql, 0, 0);
+        if (val != NULL && strlen(val) > 0)
+            ctx->str_val = val;
+        val = kore_pgsql_getvalue(&ctx->sql, 0, 1);
+        if (val != NULL && strlen(val) > 0) {
+            ctx->json_val = json_loads(val, JSON_ALLOW_NUL, &jerr);
+            if (ctx->json_val == NULL) {
+                kore_log(LOG_ERR, "malformed json read from database.");
+                return (HTTP_STATE_ERROR);
+            }
+        }
         ctx->blob_val = kore_pgsql_getvalue(&ctx->sql, 0, 2);
         kore_log(LOG_NOTICE, "%s: reading...");
     }
@@ -559,13 +633,14 @@ int state_error(struct http_request *req)
 {
     struct servo_context    *ctx = req->hdlr_extra;
 
+    kore_log(LOG_DEBUG, "request for {%s} failed", 
+        ctx->session.client);
+
     kore_pgsql_cleanup(&ctx->sql);
     http_response_header(req, "content-type", "text/html");
     http_response(req, 500, asset_error_html,
                             asset_len_error_html);
 
-    kore_log(LOG_DEBUG, "%s: request failed", 
-        __FUNCTION__);
     return (HTTP_STATE_COMPLETE);
 }
 
@@ -574,8 +649,8 @@ int state_done(struct http_request *req)
 {
     struct servo_context *ctx = req->hdlr_extra;
 
-    kore_pgsql_cleanup(&ctx->sql);
     kore_log(LOG_DEBUG, "request for {%s} complete",
         ctx->session.client);
+    kore_pgsql_cleanup(&ctx->sql);
     return (HTTP_STATE_COMPLETE);
 }

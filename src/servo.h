@@ -31,6 +31,11 @@ struct servo_config {
 	// total number of stored sessions
 	size_t max_sessions;
 
+	// size limits
+	size_t string_size;
+	size_t json_size;
+	size_t blob_size;
+
 	// filter by Origin header
 	char *allow_origin;
 
