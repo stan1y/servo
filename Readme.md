@@ -20,6 +20,13 @@ Clients use Servo API to establish a session and store data in it. The service i
 
 ### Build & Install
 
+
+#### Install Dependencies 
+
+
+* __CentOS 7:__ `sudo yum install postgresql-sever postgresql-devel libuuid-devel`
+
+
 Servo is built on top of the [Kore framework](https://kore.io/), so you need to install it first.
 
      $ cd kore
