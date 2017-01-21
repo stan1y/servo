@@ -1,2 +1,6 @@
 #!/bin/bash
-kore -c /usr/local/servo/conf/kore.conf
+KORE=`which kore`
+if [ $? -ne 0 ]; then
+	KORE="/usr/local/bin/kore";
+fi
+$KORE -c /usr/local/servo/conf/kore.conf

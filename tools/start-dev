@@ -1,6 +1,7 @@
 #!/bin/bash
 DIR="$( dirname "${BASH_SOURCE[0]}" )"
 SERVO="$( realpath "${DIR}/.." )"
+KORE="/usr/local/bin/kore"
 
 cd $SERVO
-ls -d ./src/* ./assets/* | entr -r sh -c "kore clean && kore run"
+ls -d ./src/* ./assets/* | entr -r sh -c "$KORE clean && $KORE run"
