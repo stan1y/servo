@@ -9,7 +9,6 @@ char   *servo_config_paths[] = {
 };
 #define servo_config_paths_size (sizeof(servo_config_paths) / sizeof(servo_config_paths[0]))
 
-
 #define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
 
 static int servo_read_config_handler(void* user, const char* section, const char* name,
@@ -20,8 +19,8 @@ static int servo_read_config_handler(void* user, const char* section, const char
     cfg = (struct servo_config *)user;
     if (MATCH("servo", "public_mode")) {
         cfg->public_mode = atoi(value);
-    } else if (MATCH("servo", "database")) {
-        cfg->connect = kore_strdup(value);
+    } else if (MATCH("servo", "postgresql")) {
+        cfg->postgresql = kore_strdup(value);
     } else if (MATCH("session", "ttl")) {
         cfg->session_ttl = atoi(value);
     } else if (MATCH("session", "string_size")) {
@@ -149,8 +148,9 @@ struct kore_buf *
 servo_request_data(struct http_request *req)
 {
     struct kore_buf     *buf;
-    int                  rc;
+    int                  r;
     char                 data[BUFSIZ];
+
 
     buf = kore_buf_alloc(http_body_max);
 
@@ -166,31 +166,4 @@ servo_request_data(struct http_request *req)
     }
 
     return buf;
-}
-
-static void
-servo_log_jerr(const char* fname, const json_error_t *jerr)
-{
-    kore_log(LOG_ERR, "%s: %s.\n\tline: %d, column: %d, position: %d",
-             fname, jerr->text, jerr->line, jerr->column, jerr->position);
-}
-
-json_t * servo_request_json_data(struct http_request *req)
-{
-    json_error_t jerr;
-    json_t *json = NULL;
-    char *str = NULL;
-
-    str = servo_request_str_data(req);
-    if (str == NULL) {
-        return NULL;
-    }
-
-    json = json_loads(str, JSON_ALLOW_NUL, &jerr);
-    if (json == NULL) {
-        servo_log_jerr(__FUNCTION__, &jerr);
-        return NULL;
-    }
-
-    return NULL;
 }

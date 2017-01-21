@@ -2,6 +2,7 @@
 #define _SERVO_UTIL_H_
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
 
@@ -18,9 +19,14 @@
 
 #include <jansson.h>
 
-#define SERVO_CONTENT_STRING 0
-#define SERVO_CONTENT_JSON   1
-#define SERVO_CONTENT_BLOB   2
+#define CONTENT_TYPE_STRING		"text/plain"
+#define CONTENT_TYPE_JSON		"application/json"
+#define CONTENT_TYPE_BLOB		"multipart/form-data"
+#define CONTENT_TYPE_HTML		"text/html"
+
+#define SERVO_CONTENT_STRING	0
+#define SERVO_CONTENT_JSON		1
+#define SERVO_CONTENT_BLOB		2
 
 struct kore_buf		*servo_request_data(struct http_request *);
 void				 servo_response_json(struct http_request *,

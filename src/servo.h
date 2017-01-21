@@ -13,70 +13,94 @@
 #define CLIENT_LEN 255
 #define ITEM_KEY_LEN 255
 
+#define PGSQL_FORMAT_TEXT 0
+#define PGSQL_FORMAT_BINARY 1
+
 struct servo_session {
-    char client[CLIENT_LEN];
-    time_t expire_on;
+
+    char		 client[CLIENT_LEN];
+    time_t		 expire_on;
 };
 
 struct servo_config {
-	// connection string
-	char *connect;
 
-	// enable Public Mode
-	int public_mode;
-	
-	// global session TTL
-	size_t session_ttl;
+	char		*postgresql;
+	int			 public_mode;
+	size_t		 session_ttl;
+	size_t		 max_sessions;
 
-	// total number of stored sessions
-	size_t max_sessions;
+	/* values size limits */
+	size_t		 string_size;
+	size_t		 json_size;
+	size_t		 blob_size;
 
-	// size limits
-	size_t string_size;
-	size_t json_size;
-	size_t blob_size;
-
-	// filter by Origin header
-	char *allow_origin;
-
-	// filter by Connection's ip address
-	char *allow_ipaddr;
+	/* filtering */
+	char		 *allow_origin;
+	char		 *allow_ipaddr;
 };
 
+extern struct servo_config *CONFIG;
+
 struct servo_context {
+
+	int					 status;
     struct kore_pgsql	 sql;
     struct servo_session session;
 
-    /* IN and OUT options of Content-Type */
-    int in_content_type;
-    int out_content_type;
+    /* in/out content-type */
+    int		 in_content_type;
+    int		 out_content_type;
 
-    /* Requested item data */
+    /* item data */
     char	*str_val;
     json_t	*json_val;
     void	*blob_val;
+    size_t	 val_sz;
 };
 
-struct servo_context * servo_create_context(struct http_request *req);
-int servo_put_session(struct servo_session *s);
-int servo_read_config(struct servo_config *cfg);
+int						 servo_read_config(struct servo_config *cfg);
 
-/**
- * Bootstrap servo service on start
- */
-int servo_init(int state);
+struct servo_context	*servo_create_context(struct http_request *req);
+int						 servo_put_session(struct servo_session *s);
 
-/**
- * Sessions API entry point.
- * - session index
- * - session item get/post/put/delete
- */
-int servo_start(struct http_request *);
+int						 servo_init(int state);
+int						 servo_start(struct http_request *);
+int						 servo_render_stats(struct http_request *req);
+int						 servo_render_console(struct http_request *req);
 
-/* Render JSON stats to API clients */
-int servo_render_stats(struct http_request *req);
+char					*servo_item_to_string(struct servo_context *);
+char					*servo_item_to_json(struct servo_context *);
 
-/* Render Debug console */
-int servo_render_console(struct http_request *req);
+int						 servo_is_success(struct servo_context *);
+int						 servo_is_redirect(struct servo_context *);
+
+
+/* States */
+
+#define REQ_STATE_C_SESSION     0
+#define REQ_STATE_Q_SESSION     1
+#define REQ_STATE_W_SESSION     2
+#define REQ_STATE_R_SESSION     3
+#define REQ_STATE_C_ITEM        4
+#define REQ_STATE_Q_ITEM        5
+#define REQ_STATE_W_ITEM        6
+#define REQ_STATE_R_ITEM        7
+#define REQ_STATE_ERROR         8
+#define REQ_STATE_DONE          9
+
+int					 state_connect_session(struct http_request *);
+int				 	 state_query_session(struct http_request *);
+int					 state_wait_session(struct http_request *);
+int					 state_read_session(struct http_request *);
+					
+int					 state_connect_item(struct http_request *);
+int					 state_query_item(struct http_request *);
+int					 state_wait_item(struct http_request *);
+int					 state_read_item(struct http_request *);
+int					 state_error(struct http_request *);
+int					 state_done(struct http_request *);
+					
+int					 servo_connect_db(struct http_request *, int, int, int);
+int					 servo_wait(struct http_request *, int, int, int);
 
 #endif //_SERVO_H_
