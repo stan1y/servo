@@ -25,6 +25,7 @@ Clients use Servo API to establish a session and store data in it. The service i
 
 
 * __CentOS 7:__ `sudo yum install postgresql-sever postgresql-devel libuuid-devel`
+* __Mac OS X:__ `brew install postgresql ossp-uuid`
 
 
 Servo is built on top of the [Kore framework](https://kore.io/), so you need to install it first.
@@ -39,25 +40,34 @@ Servo is built on top of the [Kore framework](https://kore.io/), so you need to 
 This will build Kore with features used by Servo. Next build Servo with `kore` tool. Make sure it is installed correctly:
 
      $ kore -v
+
+Select build flavor corresponding to your platform, see available flavors with `kore flavor`
+
+     $ kore flavor linux-dev
+
+And finally build Servo.
+
      $ kore build
-This command will build a `servo.so` module which is an application for Kore. Next you can install Servo to the system or run it locally in debug mode.
+
+This command will build a `servo.so` module which is an application for Kore. Next you can install Servo to the system or run it locally in debug mode. 
 
 Execute
 
-     $ kore run 
-To run locally.
+     $ kore run
 
-Or use
-     $ sudo ./tools/install
-To install globally to $PREFIX specified at build.
+To run locally, or run
+
+     $ sudo tools/install
+
+To install globally to `PREFIX` specified at build.
 
 ### Configuration
 
 To configure a fresh installation of Servo run the following tools:
 
-     $ sudo /usr/local/servo/tools/configure
+     $ sudo tools/configure
 
-This will drop and create a new database accoring to `create-db.sql` file. 
+This will drop and create a new fresh database.
 
 
 ### Query Data
