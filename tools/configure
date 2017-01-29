@@ -1,6 +1,11 @@
 #!/bin/bash
-DIR="$( dirname "${BASH_SOURCE[0]}" )"
 
-useradd -r servo
-chown -R servo /usr/local/servo
+DIR="$( dirname "${BASH_SOURCE[0]}" )"
+OSNAME="$( uname -s | sed -e 's/[-_].*//g' | tr A-Z a-z )"
+
+if [ "$OSNAME" == "linux" ]; then
+	useradd -r servo
+	chown -R servo /usr/local/servo
+fi
+
 $DIR/drop-db && $DIR/create-db

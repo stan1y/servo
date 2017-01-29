@@ -1,6 +1,6 @@
 #!/bin/bash
 DIR="$( dirname "${BASH_SOURCE[0]}" )"
-SERVO="$( realpath "${DIR}/.." )"
+SERVO="${DIR}/.."
 KORE="/usr/local/bin/kore"
 
 cd $SERVO
