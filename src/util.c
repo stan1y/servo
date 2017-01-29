@@ -19,8 +19,8 @@ static int servo_read_config_handler(void* user, const char* section, const char
     cfg = (struct servo_config *)user;
     if (MATCH("servo", "public_mode")) {
         cfg->public_mode = atoi(value);
-    } else if (MATCH("servo", "postgresql")) {
-        cfg->postgresql = kore_strdup(value);
+    } else if (MATCH("servo", "database")) {
+        cfg->database = kore_strdup(value);
     } else if (MATCH("session", "ttl")) {
         cfg->session_ttl = atoi(value);
     } else if (MATCH("session", "string_size")) {
@@ -133,7 +133,8 @@ void servo_response_json(struct http_request * req,
     free(json);
 }
 
-void servo_response_error(struct http_request *req,
+void
+servo_response_error(struct http_request *req,
 			const unsigned int http_code,
 			const char* err)
 {
@@ -166,4 +167,10 @@ servo_request_data(struct http_request *req)
     }
 
     return buf;
+}
+
+int
+servo_is_item_request(struct http_request *req)
+{
+    return (strcmp(req->path, "/") != 0 && strlen(req->path) > 1);
 }

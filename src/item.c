@@ -16,13 +16,25 @@ int state_query_item(struct http_request *req)
     int                      rc, too_big;
     struct servo_context    *ctx;
     struct kore_buf         *body;
-    char                    *str_val;
+    char                    *val_str;
     json_error_t             jerr;
-    json_t                  *json_val;
-    void                    *blob_val;
+    json_t                  *val_json;
+    void                    *val_blob;
 
     rc = KORE_RESULT_OK;
     ctx = (struct servo_context*)req->hdlr_extra;
+
+    if (!servo_is_item_request(req)) {
+        kore_pgsql_cleanup(&ctx->sql);
+
+        if (CONFIG->public_mode)
+            rc = servo_render_console(req);
+        else
+            rc = servo_render_stats(req);
+
+        return (rc == KORE_RESULT_OK ? HTTP_STATE_COMPLETE : HTTP_STATE_ERROR);
+    }
+
     body = servo_request_data(req);
 
     /* Check size limitations */
@@ -64,7 +76,7 @@ int state_query_item(struct http_request *req)
             switch(ctx->in_content_type) {
                 default:
                 case SERVO_CONTENT_STRING:
-                    str_val = kore_buf_stringify(body, NULL);
+                    val_str = kore_buf_stringify(body, NULL);
                     rc = kore_pgsql_query_params(&ctx->sql, 
                                         (const char*)asset_post_item_sql, 
                                         PGSQL_FORMAT_TEXT,
@@ -76,16 +88,16 @@ int state_query_item(struct http_request *req)
                                         strlen(req->path),
                                         PGSQL_FORMAT_TEXT,
                                         PGSQL_FORMAT_TEXT, 
-                                        str_val,
-                                        strlen(str_val),
+                                        val_str,
+                                        strlen(val_str),
                                         PGSQL_FORMAT_TEXT, NULL, 0,
                                         PGSQL_FORMAT_TEXT, NULL, 0);
                     break;
 
                 case SERVO_CONTENT_JSON:
-                    str_val = kore_buf_stringify(body, NULL);
-                    json_val = json_loads(str_val, JSON_ALLOW_NUL, &jerr);
-                    if (json_val == NULL) {
+                    val_str = kore_buf_stringify(body, NULL);
+                    val_json = json_loads(val_str, JSON_ALLOW_NUL, &jerr);
+                    if (val_json == NULL) {
                         kore_buf_free(body);
                         kore_log(LOG_ERR, "%s: %s at line: %d, column: %d, pos: %d, source: '%s'",
                             __FUNCTION__,
@@ -106,13 +118,13 @@ int state_query_item(struct http_request *req)
                                         PGSQL_FORMAT_TEXT,
                                         PGSQL_FORMAT_TEXT, NULL, 0,
                                         PGSQL_FORMAT_TEXT, 
-                                        json_dumps(json_val, JSON_INDENT(2)), 
+                                        json_dumps(val_json, JSON_INDENT(2)), 
                                         body->offset,
                                         PGSQL_FORMAT_TEXT, NULL, 0);
                     break;
 
                 case SERVO_CONTENT_BLOB:
-                    blob_val = (void *)body;
+                    val_blob = (void *)body;
                     rc = kore_pgsql_query_params(&ctx->sql, 
                                         (const char*)asset_post_item_sql, 
                                         PGSQL_FORMAT_TEXT,
@@ -127,7 +139,7 @@ int state_query_item(struct http_request *req)
                                         PGSQL_FORMAT_TEXT, NULL, 0,
                                         PGSQL_FORMAT_TEXT, NULL, 0,
                                         PGSQL_FORMAT_TEXT, 
-                                        (const char *)blob_val, 
+                                        (const char *)val_blob, 
                                         body->offset);
                     break;
             } 
@@ -200,20 +212,20 @@ int state_read_item(struct http_request *req)
         /* found existing session record */
         val = kore_pgsql_getvalue(&ctx->sql, 0, 0);
         if (val != NULL && strlen(val) > 0) {
-            ctx->str_val = val;
+            ctx->val_str = val;
             ctx->val_sz = strlen(val);
         }
 
         val = kore_pgsql_getvalue(&ctx->sql, 0, 1);
         if (val != NULL && strlen(val) > 0) {
-            ctx->json_val = json_loads(val, JSON_ALLOW_NUL, &jerr);
-            if (ctx->json_val == NULL) {
+            ctx->val_json = json_loads(val, JSON_ALLOW_NUL, &jerr);
+            if (ctx->val_json == NULL) {
                 kore_log(LOG_ERR, "malformed json received from store");
                 return (HTTP_STATE_ERROR);
             }
         }
-        ctx->blob_val = kore_pgsql_getvalue(&ctx->sql, 0, 2);
-        ctx->val_sz = strlen(ctx->blob_val);
+        ctx->val_blob = kore_pgsql_getvalue(&ctx->sql, 0, 2);
+        ctx->val_sz = strlen(ctx->val_blob);
     }
     else {
         kore_log(LOG_ERR, "%s: selected %d rows, 1 expected",

@@ -16,82 +16,26 @@ state_query_session(struct http_request *req)
 {
     int                      rc = KORE_RESULT_OK;
     struct servo_context    *ctx = req->hdlr_extra;
-    char                    *usrclient;
-    uuid_t                   cid;
 
-    if (!ctx->session.client || strlen(ctx->session.client) == 0) {
-        /* Check request header first */
-        if (http_request_header(req, "X-Servo-Client", &usrclient)) {
-            strncpy(ctx->session.client, usrclient, sizeof(ctx->session.client) - 1);
-        }
+
+    /* read session properties from database */
+    rc = kore_pgsql_query_params(&ctx->sql, 
+                                (const char*)asset_query_session_sql,
+                                PGSQL_FORMAT_TEXT,
+                                1,
+                                ctx->session.client,
+                                strlen(ctx->session.client),
+                                PGSQL_FORMAT_TEXT);
+
+    /* Wait for session data in REQ_STATE_W_SESSION or report error */
+    req->fsm_state = REQ_STATE_W_SESSION;
+    if (rc != KORE_RESULT_OK) {
+        kore_pgsql_logerror(&ctx->sql);
+        req->fsm_state = REQ_STATE_ERROR;
     }
 
-    if (!ctx->session.client || strlen(ctx->session.client) == 0) {
-        /* Read cookie next */
-        http_populate_cookies(req);
-        if (http_request_cookie(req, "Servo-Client", &usrclient)) {
-            strncpy(ctx->session.client, usrclient, sizeof(ctx->session.client) - 1);
-        }
-    }
-
-    if (!ctx->session.client || strlen(ctx->session.client) == 0) {
-        /* Generate new client id and init fresh session */
-        uuid_generate(cid);
-        memset(ctx->session.client, 9, sizeof(ctx->session.client));
-        uuid_unparse(cid, ctx->session.client);
-        ctx->session.expire_on = time(NULL) + CONFIG->session_ttl;
-        
-        /* Proceed to REQ_STATE_C_ITEM with newly created session */
-        req->fsm_state = REQ_STATE_C_ITEM;
-        if (!servo_put_session(&ctx->session)) {
-            req->fsm_state = REQ_STATE_ERROR;
-        }
-    }
-    else {
-
-        /* Client reported ID, so Servo lookups existing session 
-         * 'asset_query_session_sql' - $1 client id
-         */
-
-        rc = kore_pgsql_query_params(&ctx->sql, 
-                                    (const char*)asset_query_session_sql,
-                                    PGSQL_FORMAT_TEXT,
-                                    1,
-                                    ctx->session.client,
-                                    strlen(ctx->session.client),
-                                    PGSQL_FORMAT_TEXT);
-        /* Wait for session data in REQ_STATE_W_SESSION or report error */
-        req->fsm_state = REQ_STATE_W_SESSION;
-        if (rc != KORE_RESULT_OK) {
-            kore_log(LOG_ERR, "%s: failed to execute query.", __FUNCTION__);
-            req->fsm_state = REQ_STATE_ERROR;
-        }
-    }
-    /* now we know client id and have a session, 
-       make sure requestor knows it too if case we 
-       had generated a new anonymous session */
-    http_response_cookie(req, "Servo-Client", ctx->session.client);
-    http_response_header(req, "X-Servo-Client", ctx->session.client);
-    kore_log(LOG_NOTICE, "serving client {%s}", ctx->session.client);
-
-    /* check if item was requested or index */
-    if (strcmp(req->path, "/") == 0) {
-        if (CONFIG->public_mode)
-            rc = servo_render_console(req);
-        else
-            rc = servo_render_stats(req);
-
-        if (rc == KORE_RESULT_ERROR) {
-            /* report error in error state */
-            req->fsm_state = REQ_STATE_ERROR;
-        }
-        else {
-            /* complete request, response was rendered */
-            req->fsm_state = REQ_STATE_DONE;
-        }
-    }
-
-    /* State machine */
+    kore_log(LOG_DEBUG, "session query complete, continue to %s", 
+        servo_request_state(req));
     return HTTP_STATE_CONTINUE; 
 }
 
@@ -118,10 +62,11 @@ state_read_session(struct http_request *req)
 
     rows = kore_pgsql_ntuples(&ctx->sql);
     if (rows == 0) {
-        /* known client but no session record, expired? */
+        /* no session found, create a new one */
+        kore_log(LOG_NOTICE, "no session not found for {%s}",
+            ctx->session.client);
+
         ctx->session.expire_on = time(NULL) + CONFIG->session_ttl;
-        kore_log(LOG_NOTICE, "%s: session %s was not found",
-            __FUNCTION__, ctx->session.client);
         if (!servo_put_session(&ctx->session)) {
             req->fsm_state = REQ_STATE_ERROR;
             return (HTTP_STATE_CONTINUE);

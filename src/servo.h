@@ -24,7 +24,7 @@ struct servo_session {
 
 struct servo_config {
 
-	char		*postgresql;
+	char		*database;
 	int			 public_mode;
 	size_t		 session_ttl;
 	size_t		 max_sessions;
@@ -52,9 +52,9 @@ struct servo_context {
     int		 out_content_type;
 
     /* item data */
-    char	*str_val;
-    json_t	*json_val;
-    void	*blob_val;
+    char	*val_str;
+    json_t	*val_json;
+    void	*val_blob;
     size_t	 val_sz;
 };
 
@@ -102,5 +102,9 @@ int					 state_done(struct http_request *);
 					
 int					 servo_connect_db(struct http_request *, int, int, int);
 int					 servo_wait(struct http_request *, int, int, int);
+
+const char 			*servo_state(int s);
+const char			*servo_sql_state(int s);
+const char			*servo_request_state(struct http_request *);
 
 #endif //_SERVO_H_

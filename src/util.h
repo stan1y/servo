@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <linux/limits.h>
+#include <limits.h>
 
 #include <kore/kore.h>
 #include <kore/http.h>
@@ -28,6 +28,8 @@
 #define SERVO_CONTENT_JSON		1
 #define SERVO_CONTENT_BLOB		2
 
+
+int					 servo_is_item_request(struct http_request *);
 struct kore_buf		*servo_request_data(struct http_request *);
 void				 servo_response_json(struct http_request *,
 						const unsigned int, const json_t *);
