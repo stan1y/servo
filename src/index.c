@@ -25,6 +25,23 @@ int servo_render_stats(struct http_request *req)
     return rc;
 }
 
+int servo_render_console_js(struct http_request *req)
+{
+    int                      rc;
+    struct kore_buf         *buf;
+
+    rc = KORE_RESULT_OK;
+    buf = kore_buf_alloc(asset_len_console_js);
+    kore_buf_append(buf, asset_console_js, asset_len_console_js);
+    http_response_header(req, "content-type", "application/javascript");
+    http_response(req, 200, buf->data, buf->offset);
+    kore_buf_free(buf);
+
+    kore_log(LOG_NOTICE, "rendering console javascript %u bytes", 
+                         asset_len_console_js);
+    return rc;
+}
+
 int servo_render_console(struct http_request *req)
 {
     int                      rc;
