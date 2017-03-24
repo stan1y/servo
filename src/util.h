@@ -19,10 +19,10 @@
 
 #include <jansson.h>
 
-#define CONTENT_TYPE_STRING		"text/plain"
-#define CONTENT_TYPE_JSON		"application/json"
-#define CONTENT_TYPE_BLOB		"multipart/form-data"
-#define CONTENT_TYPE_HTML		"text/html"
+#define CONTENT_TYPE_STRING		"text/plain; charset=UTF-8"
+#define CONTENT_TYPE_JSON		"application/json; charset=UTF-8"
+#define CONTENT_TYPE_BLOB		"multipart/form-data; charset=UTF-8"
+#define CONTENT_TYPE_HTML		"text/html; charset=UTF-8"
 
 #define SERVO_CONTENT_STRING	0
 #define SERVO_CONTENT_JSON		1

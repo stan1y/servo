@@ -367,7 +367,22 @@ int state_done(struct http_request *req)
 
     kore_pgsql_cleanup(&ctx->sql);
 
-    if (servo_is_item_request(req) && req->method == HTTP_METHOD_GET) {
+    if (req->method == HTTP_METHOD_POST ||
+        req->method == HTTP_METHOD_PUT) 
+    {
+        switch(ctx->out_content_type) {
+            case SERVO_CONTENT_STRING:
+                http_response_header(req, "content-type", CONTENT_TYPE_STRING);
+                break;
+            case SERVO_CONTENT_JSON:
+                http_response_header(req, "content-type", CONTENT_TYPE_JSON);
+                break;
+
+        }
+        http_response(req, ctx->status, "", 0);
+    }
+    else if (servo_is_item_request(req)) {
+
         kore_log(LOG_DEBUG, "serving item size %zu (%s) -> (%s) to {%s}",
             ctx->val_sz,
             SERVO_CONTENT_NAMES[ctx->in_content_type],
@@ -378,7 +393,6 @@ int state_done(struct http_request *req)
             default:
             case SERVO_CONTENT_STRING:
                 output = servo_item_to_string(ctx);
-                kore_log(LOG_DEBUG, "SERVING STRING");
                 http_response_header(req, "content-type", CONTENT_TYPE_STRING);
                 http_response(req, ctx->status, 
                               output == NULL ? "" : output,
@@ -398,6 +412,10 @@ int state_done(struct http_request *req)
                 break;
 
         };
+    }
+    else {
+        ctx->status = 403;
+        http_response(req, ctx->status, "", 0);
     }
     
     kore_log(LOG_DEBUG, "%d: %s to {%s}",

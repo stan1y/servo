@@ -127,7 +127,7 @@ void servo_response_json(struct http_request * req,
     json = json_dumps(data, JSON_ENCODE_ANY);
     kore_buf_append(buf, json, strlen(json));
 
-    http_response_header(req, "content-type", "application/json");
+    http_response_header(req, "content-type", CONTENT_TYPE_JSON);
     http_response(req, http_code, buf->data, buf->offset);
     kore_buf_free(buf);
     free(json);
