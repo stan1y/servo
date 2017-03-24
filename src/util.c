@@ -123,7 +123,7 @@ void servo_response_json(struct http_request * req,
     struct kore_buf *buf;
     char *json;
 
-    buf = kore_buf_alloc(2048);
+    buf = kore_buf_alloc(http_body_max);
     json = json_dumps(data, JSON_ENCODE_ANY);
     kore_buf_append(buf, json, strlen(json));
 
@@ -172,5 +172,6 @@ servo_request_data(struct http_request *req)
 int
 servo_is_item_request(struct http_request *req)
 {
-    return (strcmp(req->path, "/") != 0 && strlen(req->path) > 1);
+    return (strcmp(req->path, ROOT_PATH) != 0 &&
+            strcmp(req->path, CONSOLE_JS_PATH) != 0);
 }

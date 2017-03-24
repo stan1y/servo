@@ -78,6 +78,7 @@ state_read_session(struct http_request *req)
         ctx->session.expire_on = kore_date_to_time(value);
         if (now >= ctx->session.expire_on) {
             kore_log(LOG_NOTICE, "expired session {%s}", ctx->session.client);
+            kore_log(LOG_DEBUG, "%s -> %ld < %ld", value, ctx->session.expire_on, now);
         }
         else 
             kore_log(LOG_NOTICE, "existing session {%s}, expires on: %s",

@@ -112,7 +112,7 @@ servo_put_session(struct servo_session *s)
     }
 
     kore_pgsql_cleanup(&sql);
-    kore_log(LOG_NOTICE, "created new sessio for {%s}", s->client);
+    kore_log(LOG_NOTICE, "created new session for {%s}", s->client);
     return (KORE_RESULT_OK);
 }
 
@@ -159,8 +159,8 @@ servo_init(int state)
 
     kore_log(LOG_NOTICE, "started worker pid: %d", (int)getpid());
     kore_log(LOG_NOTICE, "  public mode: %s", CONFIG->public_mode != 0 ? "yes" : "no");
-    kore_log(LOG_NOTICE, "  session ttl: %d seconds", CONFIG->session_ttl);
-    kore_log(LOG_NOTICE, "  max sessions: %d", CONFIG->max_sessions);
+    kore_log(LOG_NOTICE, "  session ttl: %zu seconds", CONFIG->session_ttl);
+    kore_log(LOG_NOTICE, "  max sessions: %zu", CONFIG->max_sessions);
     if (CONFIG->allow_origin != NULL)
         kore_log(LOG_NOTICE, "  allow origin: %s", CONFIG->allow_origin);
     if (CONFIG->allow_ipaddr != NULL)
@@ -228,10 +228,10 @@ int servo_start(struct http_request *req)
             kore_strlcpy(ctx->session.client, usrclient, sizeof(ctx->session.client));
         }
         if (usrclient == NULL) {
-            /*http_populate_cookies(req);
+            http_populate_cookies(req);
             if (http_request_cookie(req, "Servo-Client", &usrclient)) {
                 kore_strlcpy(ctx->session.client, usrclient, sizeof(ctx->session.client));
-            }*/
+            }
         }
         if (usrclient == NULL) {
             /* Generate new client id and init fresh session */
@@ -244,7 +244,8 @@ int servo_start(struct http_request *req)
 
         /* Pass generated ID to client */        
         http_response_header(req, "X-Servo-Client", ctx->session.client);
-        //http_response_cookie(req, "Servo-Client", ctx->session.client);
+        http_response_cookie(req, "Servo-Client", ctx->session.client,
+            HTTP_COOKIE_SECURE | HTTP_COOKIE_HTTPONLY);
     }
 
     return (http_state_run(servo_session_states, servo_session_states_size, req));
@@ -332,98 +333,41 @@ servo_wait(struct http_request *req, int read_step, int complete_step, int error
 int state_error(struct http_request *req)
 {
     struct servo_context    *ctx = req->hdlr_extra;
-    struct kore_buf         *msgbuf;
-    char                    *err;
-    const static size_t      codesz = 12;
-    char                     code[codesz];
+    const char              *msg;
+
+    kore_pgsql_cleanup(&ctx->sql);
 
     /* Handle redirect */
     if (servo_is_redirect(ctx)) {
-        switch(ctx->status) {
-            default:
-            case 300: 
-                err = "Multiple Choice";
-                break;
-            case 301:
-                err = "Moved Permanently";
-                break;
-            case 302:
-                err = "Found";
-                break;
-            case 303:
-                err = "See Other";
-                break;
-            case 304:
-                err = "Not Modified";
-                break;
-        };
-        kore_log(LOG_DEBUG, "redirecting client '%d: %s' %s", 
-            ctx->status, err, req->path);
-        http_response(req, ctx->status, err, strlen(err));
+        msg = http_status_text(ctx->status);
+        kore_log(LOG_DEBUG, "%d: %s to '%s'", 
+            ctx->status, msg, req->path);
+        http_response(req, ctx->status, msg, sizeof(msg));
         return (HTTP_STATE_COMPLETE);
     }
 
-    /* Report error */
     if (servo_is_success(ctx)) {
         ctx->status = 500;
         kore_log(LOG_DEBUG, "no error status set, default=500");
     }
-    snprintf(code, codesz, "%d", ctx->status);
 
-    msgbuf = kore_buf_alloc(1024);
-    kore_buf_append(msgbuf, asset_error_html, asset_len_error_html);
-    kore_buf_replace_string(msgbuf, "$(status)", code, codesz);
-    switch(ctx->status) {
-        case 400:
-            err = "Bad Request";
-            break;
-        case 401:
-            err = "Unauthorized";
-            break;
-        case 403:
-            err = "Forbidden";
-            break;
-        case 404:
-            err = "Not Found";
-            break;
-        default:
-        case 500:
-            err = "Internal Server Error";
-            break;
-    }
-    kore_buf_replace_string(msgbuf, "$(message)", err, strlen(err));
-    kore_pgsql_cleanup(&ctx->sql);
-    servo_response_error(req, ctx->status, err);
-    kore_log(LOG_ERR, "request failed with '%d: %s', sql state: %s", 
-        ctx->status, err, 
+    kore_log(LOG_ERR, "%d: %s, sql state: %s", 
+        ctx->status, 
+        http_status_text(ctx->status), 
         servo_sql_state(ctx->sql.state));
+    servo_response_error(req, ctx->status, http_status_text(ctx->status));
     return (HTTP_STATE_COMPLETE);
 }
 
 /* Request was completed successfully. */
 int state_done(struct http_request *req)
 {
-    struct servo_context    *ctx;
-    char                    *msg, *output;
-    const static size_t      codesz = 12;
-    char                     code[codesz];
+    struct servo_context    *ctx = req->hdlr_extra;
+    char                    *output;
 
-    ctx = (struct servo_context *)req->hdlr_extra;
-    snprintf(code, codesz, "%d", ctx->status);
+    kore_pgsql_cleanup(&ctx->sql);
 
-    switch(ctx->status) {
-        default:
-        case 200:
-            msg = "Complete";
-            break;
-
-        case 201:
-            msg = "Created";
-            break;
-
-    };
-
-    if (servo_is_item_request(req)) {
+    if (servo_is_item_request(req) && req->method == HTTP_METHOD_GET) {
         kore_log(LOG_DEBUG, "serving item size %zu (%s) -> (%s) to {%s}",
             ctx->val_sz,
             SERVO_CONTENT_NAMES[ctx->in_content_type],
@@ -434,26 +378,32 @@ int state_done(struct http_request *req)
             default:
             case SERVO_CONTENT_STRING:
                 output = servo_item_to_string(ctx);
+                kore_log(LOG_DEBUG, "SERVING STRING");
                 http_response_header(req, "content-type", CONTENT_TYPE_STRING);
-                http_response(req, ctx->status, output, strlen(output));
+                http_response(req, ctx->status, 
+                              output == NULL ? "" : output,
+                              output == NULL ? 0 : strlen(output));
                 break;
 
             case SERVO_CONTENT_JSON:
                 output = servo_item_to_json(ctx);
                 http_response_header(req, "content-type", CONTENT_TYPE_JSON);
-                http_response(req, ctx->status, output, strlen(output));
+                http_response(req, ctx->status,
+                              output == NULL ? "" : output,
+                              output == NULL ? 0 : strlen(output));
                 break;
 
             case SERVO_CONTENT_BLOB:
-                servo_response_error(req, 403, "No Supported");
+                servo_response_error(req, 403, http_status_text(403));
                 break;
 
         };
     }
     
-    kore_pgsql_cleanup(&ctx->sql);
-    kore_log(LOG_DEBUG, "request complete with '%d: %s' for {%s}",
-        ctx->status, msg, ctx->session.client);
+    kore_log(LOG_DEBUG, "%d: %s to {%s}",
+        ctx->status,
+        http_status_text(ctx->status),
+        ctx->session.client);
     return (HTTP_STATE_COMPLETE);
 }
 

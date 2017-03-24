@@ -16,6 +16,9 @@
 #define PGSQL_FORMAT_TEXT 0
 #define PGSQL_FORMAT_BINARY 1
 
+#define CONSOLE_JS_PATH "/console.js"
+#define ROOT_PATH		"/"
+
 struct servo_session {
 
     char		 client[CLIENT_LEN];
@@ -58,15 +61,16 @@ struct servo_context {
     size_t	 val_sz;
 };
 
-int						 servo_read_config(struct servo_config *cfg);
+int						 servo_read_config(struct servo_config *);
 
-struct servo_context	*servo_create_context(struct http_request *req);
-int						 servo_put_session(struct servo_session *s);
+struct servo_context	*servo_create_context(struct http_request *);
+int						 servo_put_session(struct servo_session *);
 
 int						 servo_init(int state);
 int						 servo_start(struct http_request *);
-int						 servo_render_stats(struct http_request *req);
-int						 servo_render_console(struct http_request *req);
+int						 servo_render_stats(struct http_request *);
+int						 servo_render_console(struct http_request *);
+int 					 servo_render_console_js(struct http_request *);
 
 char					*servo_item_to_string(struct servo_context *);
 char					*servo_item_to_json(struct servo_context *);
