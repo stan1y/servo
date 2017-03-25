@@ -1,12 +1,13 @@
 $(document).ready(function() {
-	var sendBtn = $("#send")[0],
-		resetBtn = $("#reset")[0],
-		methodSel = $("#method")[0],
-		body = $("#body")[0];
+	var sendBtn = $("#send"),
+		resetBtn = $("#reset"),
+		methodSel = $("input#method"),
+		body = $("textarea#body");
 
 	var reset = function() {
 		$("#alert-warn").hide();
 		$("#alert-error").hide();
+		$("#alert-info").hide();
 		$("div.form-group").removeClass("has-error");
 	};
 
@@ -16,21 +17,31 @@ $(document).ready(function() {
 		$("#alert-error").show();
 	};
 
-	var onServoSuccess = function(data) {
+	var onServoSuccess = function(data, status, resp) {
+		console.log("Request completed, received " + data.length);
 		if (data && data.length > 0)
-			$("#body").val(data);
+			body.val(data);
+		if (data.length)
+			$("#alert-info").children(".details").html("Received " + data.length + " chars.");
+		$("#alert-info p#info-resp").replaceWith(resp.status + ": " + resp.statusText);
+		$("#alert-info").show();
 	};
 
-	var send = function(clientId, method, itemKey, contentType, data) {
+	var send = function(clientId, method, itemKey, dataType, data) {
 		var servoUrl = "https://" + window.location.host
 		             + "/" + itemKey;
 		console.log("servoUrl=" + servoUrl);
 		$.ajax(servoUrl, {
 			method: method,
 			data: data,
-			contentType: contentType,
+			dataType: dataType,
+			accepts: { 
+				text: 'text/plain; charset=UTF-8',
+				json: 'application/json; charset=UTF-8',
+				binary: 'multipart/form-data; charset=UTF-8' 
+			},
 			error: onServoError,
-			success:onServoSuccess
+			success: onServoSuccess
 		});
 	};
 
@@ -38,9 +49,9 @@ $(document).ready(function() {
 
 		var clientId = $("#client-id").val(),
 			itemKey = $("#item-key").val(),
-			contentType = $("#content-type").val(),
-			method = $("#method").val(),
-			body = $("body").val(),
+			dataType = $("#data-type").val(),
+			method = $("input#method:checked").val(),
+			data = body.val(),
 			error = false;
 
 		reset();
@@ -56,16 +67,16 @@ $(document).ready(function() {
 
 		console.log("clientId=" + clientId);
 		console.log("itemKey=" + itemKey);
-		console.log("contentType=" + contentType);
+		console.log("dataType=" + dataType);
 		console.log("method=" + method);
-		console.log("bodylen=" + body.length);
+		console.log("data length=" + data.length);
 
 		if (error) {
 			$("#alert-warn").show();
 			return;
 		}
 
-		return send(clientId, method, itemKey, contentType, body);
+		return send(clientId, method, itemKey, dataType, data);
 	});
 
 	$(resetBtn).on("click", function() {
@@ -74,12 +85,12 @@ $(document).ready(function() {
 	});
 
 	$(methodSel).on("change", function() {
-		var val = $("#method option:selected").text()
-		if (val == "POST" || val == "PUT") {
-			$(body).prop('readonly', false);
+		var checked = $("input#method:checked").val();
+		if (checked == "POST" || checked == "PUT") {
+			body.prop('readonly', false);
 		}
 		else {
-			$(body).prop('readonly', true);
+			body.prop('readonly', true);
 		}
 	})
 });

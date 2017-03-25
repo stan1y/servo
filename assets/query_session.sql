@@ -1,1 +1,1 @@
-select expire_on from session where client = $1
+select extract(epoch from expire_on) from session where client = $1

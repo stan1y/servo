@@ -21,13 +21,18 @@
 			<form class="form-horizontal">
 				<fieldset>
 					<legend>Servo Debug Console</legend>
-					
+
 					<div id="alert-warn" class="alert alert-warning" style="display: none;">
 					 	<strong>Warning!</strong> Please correct your input.
 					 	<p class="details"></p>
 					</div>
 					<div id="alert-error" class="alert alert-danger" style="display: none;">
 		  				<strong>Error!</strong> Request to Servo failed with an error.
+		  				<p class="details"></p>
+					</div>
+
+					<div id="alert-info" class="alert alert-info" style="display: none;">
+		  				<strong><p id="info-resp"></p></strong> Request to Servo completed successfully.
 		  				<p class="details"></p>
 					</div>
 					
@@ -64,26 +69,47 @@
 					</div>
 					<div class="form-group">
 						<label class="col-md-4 control-label">
-							Operation
-						</label>  
-						<div class="col-md-3">
-							<select id="method" 
-								name="method"  
-								class="form-control input-md">
-								<option value="GET">GET</option>
-								<option value="HEAD">HEAD</option>
-								<option value="POST">POST</option>
-								<option value="PUT">PUT</option>
-								<option value="DELETE">DELETE</option>
-							</select>
+							Method
+						</label>
+						<div class="col-md-5">
+							<label class="radio-inline">
+						    	<input type="radio" 
+						    		   id="method"
+						    		   name="method"
+						    		   value="GET"
+						    		   checked>GET
+						    </label>
+						    <label class="radio-inline">
+						    	<input type="radio" 
+						    		   id="method"
+						    		   name="method"
+						    		   value="POST">POST
+						    </label>
+						    <label class="radio-inline">
+						    	<input type="radio" 
+						    		   id="method"
+						    		   name="method"
+						    		   value="PUT">PUT
+						    </label>
+						    <label class="radio-inline">
+						    	<input type="radio" 
+						    		   id="method"
+						    		   name="method"
+						    		   value="DELETE">DELETE
+						    </label>
 						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-md-4 control-label">
+							Data Type
+						</label>
 						<div class="col-md-3">
-							<select id="content-type"
-								name="content-type"
+							<select id="data-type" 
+								name="data-type"  
 								class="form-control input-md">
-								<option value="text/plain">String</option>
-								<option value="application/json">JSON</option>
-								<option value="multipart/form-data">Binary</option>
+								<option value="text">Plain text</option>
+								<option value="json">JSON</option>
+								<option value="binary">Binary</option>
 							</select>
 						</div>
 					</div>
@@ -111,6 +137,7 @@
 								class="btn btn-s btn-warning">Reset</button>
 						<div>
 					</div>
+
 				</fieldset>
 			</form>
 		</div>
