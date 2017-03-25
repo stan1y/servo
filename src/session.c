@@ -34,8 +34,6 @@ state_query_session(struct http_request *req)
         req->fsm_state = REQ_STATE_ERROR;
     }
 
-    kore_log(LOG_DEBUG, "session query complete, continue to %s", 
-        servo_request_state(req));
     return HTTP_STATE_CONTINUE; 
 }
 
@@ -48,10 +46,85 @@ state_wait_session(struct http_request *req)
 }
 
 int
+servo_purge_session(struct servo_session *s)
+{
+    struct kore_pgsql   sql;
+
+    if (!kore_pgsql_query_init(&sql, NULL, DBNAME, KORE_PGSQL_SYNC)) {
+        kore_log(LOG_ERR, "%s: failed to init query", __FUNCTION__);
+        kore_pgsql_logerror(&sql);
+        return (KORE_RESULT_ERROR);
+    }
+
+    if (!kore_pgsql_query_params(&sql, 
+                                 (const char*)asset_purge_items_sql,
+                                 PGSQL_FORMAT_TEXT,
+                                 1,
+                                 s->client, 
+                                 strlen(s->client),
+                                 PGSQL_FORMAT_TEXT)) {
+        kore_log(LOG_ERR, "%s: failed to run query", __FUNCTION__);
+        kore_pgsql_logerror(&sql);
+        return (KORE_RESULT_ERROR);
+    }
+
+    if (!kore_pgsql_query_params(&sql, 
+                                 (const char*)asset_purge_session_sql,
+                                 PGSQL_FORMAT_TEXT,
+                                 1,
+                                 s->client, 
+                                 strlen(s->client),
+                                 PGSQL_FORMAT_TEXT)) {
+        kore_log(LOG_ERR, "%s: failed to run query", __FUNCTION__);
+        kore_pgsql_logerror(&sql);
+        return (KORE_RESULT_ERROR);
+    }
+
+    kore_pgsql_cleanup(&sql);
+    kore_log(LOG_NOTICE, "deleted session for {%s}", s->client);
+    return (KORE_RESULT_OK);
+}
+
+int
+servo_put_session(struct servo_session *s)
+{
+    struct kore_pgsql   sql;
+    char                sexpire_on[BUFSIZ];
+
+    if (!kore_pgsql_query_init(&sql, NULL, DBNAME, KORE_PGSQL_SYNC)) {
+        kore_log(LOG_ERR, "%s: failed to init query", __FUNCTION__);
+        kore_pgsql_logerror(&sql);
+        return (KORE_RESULT_ERROR);
+    }
+
+    memset(sexpire_on, 0, BUFSIZ);
+    snprintf(sexpire_on, BUFSIZ, "%ju", s->expire_on);
+    if (!kore_pgsql_query_params(&sql, 
+                                 (const char*)asset_put_session_sql,
+                                 PGSQL_FORMAT_TEXT,
+                                 2,
+                                 s->client, 
+                                 strlen(s->client),
+                                 PGSQL_FORMAT_TEXT,
+                                 sexpire_on,
+                                 strlen(sexpire_on),
+                                 PGSQL_FORMAT_TEXT)) {
+        kore_log(LOG_ERR, "%s: failed to run query", __FUNCTION__);
+        kore_pgsql_logerror(&sql);
+        return (KORE_RESULT_ERROR);
+    }
+
+    kore_pgsql_cleanup(&sql);
+    kore_log(LOG_NOTICE, "created new session for {%s}", s->client);
+    return (KORE_RESULT_OK);
+}
+
+
+int
 state_read_session(struct http_request *req)
 {
     int                      rows;
-    char                    *value;
+    char                    *sexpire_on;
     struct servo_context    *ctx;
     time_t                   now;
 
@@ -74,19 +147,29 @@ state_read_session(struct http_request *req)
     }
     else if (rows == 1) {
         /* found existing session record */
-        value = kore_pgsql_getvalue(&ctx->sql, 0, 0);
-        ctx->session.expire_on = kore_date_to_time(value);
-        if (now >= ctx->session.expire_on) {
-            kore_log(LOG_NOTICE, "expired session {%s}", ctx->session.client);
-            kore_log(LOG_DEBUG, "%s -> %ld < %ld", value, ctx->session.expire_on, now);
+        sexpire_on = kore_pgsql_getvalue(&ctx->sql, 0, 0);
+        kore_log(LOG_DEBUG, "found session expire_on=%s", sexpire_on);
+        ctx->session.expire_on = atoi(sexpire_on);
+        if (ctx->session.expire_on < now) {
+            kore_log(LOG_NOTICE, "expired session for {%s}", ctx->session.client);
+            kore_log(LOG_DEBUG, "%s < %ld", sexpire_on, now);
+            /* recycle session */
+            servo_purge_session(&ctx->session);
+            ctx->session.expire_on = time(NULL) + CONFIG->session_ttl;
+            if (!servo_put_session(&ctx->session)) {
+                req->fsm_state = REQ_STATE_ERROR;
+                return (HTTP_STATE_CONTINUE);
+            }
         }
         else 
             kore_log(LOG_NOTICE, "existing session {%s}, expires on: %s",
                             ctx->session.client,
-                            value);
+                            sexpire_on);
     }
     else {
-        kore_log(LOG_ERR, "selected %d rows, 1 expected", rows);
+        kore_log(LOG_ERR, "%s: selected %d rows, 1 expected", 
+                 __FUNCTION__,
+                 rows);
         return (HTTP_STATE_ERROR);  
     }
 

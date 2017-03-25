@@ -19,6 +19,24 @@
 #define CONSOLE_JS_PATH "/console.js"
 #define ROOT_PATH		"/"
 
+static char* DBNAME = "servo-store";
+
+static char    *SQL_STATE_NAMES[] = {
+    "<null>",   // NULL
+    "init",     // KORE_PGSQL_STATE_INIT
+    "wait",     // KORE_PGSQL_STATE_WAIT
+    "result",   // KORE_PGSQL_STATE_RESULT
+    "error",    // KORE_PGSQL_STATE_ERROR
+    "done",     // KORE_PGSQL_STATE_DONE
+    "complete"  // KORE_PGSQL_STATE_COMPLETE
+};
+
+static char    *SERVO_CONTENT_NAMES[] = {
+    "string",
+    "json",
+    "binary"
+};
+
 struct servo_session {
 
     char		 client[CLIENT_LEN];
@@ -65,6 +83,7 @@ int						 servo_read_config(struct servo_config *);
 
 struct servo_context	*servo_create_context(struct http_request *);
 int						 servo_put_session(struct servo_session *);
+int 					 servo_purge_session(struct servo_session *);
 
 int						 servo_init(int state);
 int						 servo_start(struct http_request *);

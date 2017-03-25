@@ -71,8 +71,10 @@ int state_query_item(struct http_request *req)
             /* post_item.sql expects 5 arguments: 
              client, key, string, json, blob
             */
-            kore_log(LOG_NOTICE, "POST %s for {%s}",
-                req->path, ctx->session.client);
+            kore_log(LOG_NOTICE, "POST %s, %zu bytes (%s) read from {%s}",
+                req->path, body->offset,
+                SERVO_CONTENT_NAMES[ctx->in_content_type],
+                ctx->session.client);
 
             switch(ctx->in_content_type) {
                 default:
@@ -179,7 +181,7 @@ int state_query_item(struct http_request *req)
              * $1 - client
              * $2 - item key 
              */
-            kore_log(LOG_NOTICE, "GET %s for {%s}",
+            kore_log(LOG_NOTICE, ">> GET %s for {%s}",
                 req->path, ctx->session.client);
             rc = kore_pgsql_query_params(&ctx->sql, 
                                         (const char*)asset_get_item_sql, 
@@ -195,8 +197,6 @@ int state_query_item(struct http_request *req)
                                         PGSQL_FORMAT_TEXT);
             break;
     }
-    kore_log(LOG_NOTICE, "data request initiated for {%s}",
-                         ctx->session.client);
     kore_buf_free(body);
 
     if (rc != KORE_RESULT_OK) {
