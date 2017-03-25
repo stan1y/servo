@@ -65,6 +65,7 @@ extern struct servo_config *CONFIG;
 struct servo_context {
 
 	int					 status;
+    char                *err;
     struct kore_pgsql	 sql;
     struct servo_session session;
 
@@ -82,6 +83,7 @@ struct servo_context {
 int						 servo_read_config(struct servo_config *);
 
 struct servo_context	*servo_create_context(struct http_request *);
+void                     servo_clear_context(struct servo_context *);
 int						 servo_put_session(struct servo_session *);
 int 					 servo_purge_session(struct servo_session *);
 
@@ -122,6 +124,12 @@ int					 state_wait_item(struct http_request *);
 int					 state_read_item(struct http_request *);
 int					 state_error(struct http_request *);
 int					 state_done(struct http_request *);
+
+int					 state_handle_get(struct http_request *);
+int					 state_handle_post(struct http_request *, struct kore_buf *);
+int					 state_handle_put(struct http_request *, struct kore_buf *);
+int					 state_handle_delete(struct http_request *);
+int					 state_handle_head(struct http_request *);
 					
 int					 servo_connect_db(struct http_request *, int, int, int);
 int					 servo_wait(struct http_request *, int, int, int);

@@ -119,7 +119,6 @@ servo_put_session(struct servo_session *s)
     return (KORE_RESULT_OK);
 }
 
-
 int
 state_read_session(struct http_request *req)
 {

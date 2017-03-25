@@ -35,5 +35,5 @@ void				 servo_response_json(struct http_request *,
 						const unsigned int, const json_t *);
 void				 servo_response_error(struct http_request *,
 						const unsigned int, const char *);
-
+void				 servo_handle_pg_error(struct http_request *);
 #endif //_SERVO_UTIL_H_

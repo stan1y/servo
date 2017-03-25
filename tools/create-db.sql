@@ -8,8 +8,8 @@ create table session (
 );
 
 create table item (
+	key			varchar(255) primary key,
 	client		varchar(36) references session (client),
-	key			varchar(255),
 	str_val		text,
 	json_val	json,
 	blob_val	bytea

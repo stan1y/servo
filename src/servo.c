@@ -50,6 +50,7 @@ servo_create_context(struct http_request *req)
     memset(&ctx->sql, 0, sizeof(struct kore_pgsql));
     
     ctx->status = 200;
+    ctx->err = NULL;
     ctx->session.expire_on = 0;
     ctx->val_sz = 0;
     ctx->val_str = NULL;
@@ -61,6 +62,12 @@ servo_create_context(struct http_request *req)
     ctx->out_content_type = SERVO_CONTENT_STRING;
 
     return ctx;
+}
+
+void
+servo_clear_context(struct servo_context *ctx)
+{
+
 }
 
 int
@@ -230,6 +237,23 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
     return (HTTP_STATE_CONTINUE);
 }
 
+void 
+servo_handle_pg_error(struct http_request *req)
+{
+    struct servo_context *ctx = req->hdlr_extra;
+
+    // default failure code
+    ctx->status = 500;
+
+    if (strstr(ctx->sql.error, "duplicate key value violates unique constraint") != NULL) {
+        ctx->status = 409; // Conflict
+    }
+
+    if (ctx->err == NULL) {
+        ctx->err = kore_strdup(ctx->sql.error);
+    }
+}
+
 int
 servo_wait(struct http_request *req, int read_step, int complete_step, int error_step)
 {
@@ -253,11 +277,10 @@ servo_wait(struct http_request *req, int read_step, int complete_step, int error
 
     case KORE_PGSQL_STATE_ERROR:
         req->fsm_state = error_step;
-        ctx->status = 500;
-        kore_log(LOG_ERR, "%s: io failed ~> %s",
-            __FUNCTION__,
-            servo_request_state(req));
-        kore_pgsql_logerror(&ctx->sql);
+        kore_log(LOG_ERR, "io failed ~> %s.\n%s",
+            servo_request_state(req),
+            ctx->sql.error);
+        servo_handle_pg_error(req);
         break;
 
     default:
@@ -280,9 +303,14 @@ int state_error(struct http_request *req)
     /* Handle redirect */
     if (servo_is_redirect(ctx)) {
         msg = http_status_text(ctx->status);
-        kore_log(LOG_DEBUG, "%d: %s to '%s'", 
-            ctx->status, msg, req->path);
+        kore_log(LOG_DEBUG, "%d: %s ~> '%s' to {%s}", 
+            ctx->status,
+            msg,
+            req->path,
+            ctx->session.client);
+
         http_response(req, ctx->status, msg, sizeof(msg));
+        servo_clear_context(ctx);
         return (HTTP_STATE_COMPLETE);
     }
 
@@ -296,7 +324,10 @@ int state_error(struct http_request *req)
         http_status_text(ctx->status), 
         servo_sql_state(ctx->sql.state),
         ctx->session.client);
-    servo_response_error(req, ctx->status, http_status_text(ctx->status));
+    servo_response_error(req, ctx->status, 
+        ctx->err != NULL ? ctx->err : http_status_text(ctx->status));
+
+    servo_clear_context(ctx);
     return (HTTP_STATE_COMPLETE);
 }
 
@@ -366,6 +397,8 @@ int state_done(struct http_request *req)
         ctx->status,
         http_status_text(ctx->status),
         ctx->session.client);
+
+    servo_clear_context(ctx);
     return (HTTP_STATE_COMPLETE);
 }
 

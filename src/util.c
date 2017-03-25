@@ -140,7 +140,7 @@ servo_response_error(struct http_request *req,
 {
     json_t* data;
     
-    data = json_pack("{s:i s:s}", "code", http_code, "error", err);
+    data = json_pack("{s:i s:s}", "code", http_code, "message", err);
     servo_response_json(req, http_code, data);
     json_decref(data);
 }

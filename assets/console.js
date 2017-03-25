@@ -23,6 +23,9 @@ $(document).ready(function() {
 			body.val(data);
 		if (data.length)
 			$("#alert-info").children(".details").html("Received " + data.length + " chars.");
+		else
+			$("#alert-info").children(".details").html("");
+		
 		$("#alert-info p#info-resp").replaceWith(resp.status + ": " + resp.statusText);
 		$("#alert-info").show();
 	};
