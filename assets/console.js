@@ -8,43 +8,63 @@ $(document).ready(function() {
 		$("#alert-warn").hide();
 		$("#alert-error").hide();
 		$("#alert-info").hide();
+		$("#alert-error").children(".details").html("");
+		$("#alert-info").children(".details").html("");
 		$("div.form-group").removeClass("has-error");
 	};
 
 	var onServoError = function(xhr, type, ex) {
 		console.log("Error received: " + xhr.responseText);
-		$("#alert-error").children(".details").html(xhr.responseText);
+		var err = JSON.parse(xhr.responseText);
+
+		$("#alert-error").children(".details").html(
+			"<strong>" + xhr.status + ": " + xhr.statusText + "</strong>");
+		if (err["message"] != xhr.statusText)
+			$("#alert-error").children(".message").html(err["message"]);
 		$("#alert-error").show();
+		$("#response").val(xhr.responseText);
 	};
 
 	var onServoSuccess = function(data, status, resp) {
-		console.log("Request completed, received " + data.length);
-		if (data && data.length > 0)
-			body.val(data);
-		if (data.length)
-			$("#alert-info").children(".details").html("Received " + data.length + " chars.");
-		else
-			$("#alert-info").children(".details").html("");
-		
-		$("#alert-info p#info-resp").replaceWith(resp.status + ": " + resp.statusText);
+		var isStatusResponse = false;
+		if (typeof data == "object") {
+			if ("code" in data && "message" in data) {
+				// this is standard API status response
+				isApiResponse = true;
+				$("#alert-info").children(".details").html(
+					data["code"] + ": " + data["message"]);
+			}
+			data =  JSON.stringify(data)
+		}
+
+		if (!isStatusResponse && data && data.length) {
+			console.log("received bytes length=" + data.length);
+			$("#response").val(data);
+		}
+		$("#alert-info").children(".details").html(
+			"<strong>" + resp.status + ": " + resp.statusText + "</strong>");
 		$("#alert-info").show();
 	};
 
 	var send = function(clientId, method, itemKey, dataType, data) {
 		var servoUrl = "https://" + window.location.host
-		             + "/" + itemKey;
+		             + "/" + itemKey,
+		    dataTypesMap = { 
+				text: 'text/plain; charset=UTF-8',
+				json: 'application/json; charset=UTF-8',
+				binary: 'multipart/form-data; charset=UTF-8' 
+			};
+
 		console.log("servoUrl=" + servoUrl);
 		$.ajax(servoUrl, {
 			method: method,
 			data: data,
 			dataType: dataType,
-			accepts: { 
-				text: 'text/plain; charset=UTF-8',
-				json: 'application/json; charset=UTF-8',
-				binary: 'multipart/form-data; charset=UTF-8' 
-			},
+			accepts: dataTypesMap,
+			contentType: dataTypesMap[dataType],
 			error: onServoError,
-			success: onServoSuccess
+			success: onServoSuccess,
+			processData: false
 		});
 	};
 
@@ -67,6 +87,9 @@ $(document).ready(function() {
 			error = true;
 			$("#item-key").parent().parent('.form-group').addClass("has-error");
 		}
+
+		if (method == "GET" || method == "DELETE")
+			data = "";
 
 		console.log("clientId=" + clientId);
 		console.log("itemKey=" + itemKey);

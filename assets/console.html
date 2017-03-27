@@ -23,17 +23,14 @@
 					<legend>Servo Debug Console</legend>
 
 					<div id="alert-warn" class="alert alert-warning" style="display: none;">
-					 	<strong>Warning!</strong> Please correct your input.
-					 	<p class="details"></p>
+					 	<strong>Warning</strong>. Please correct your input.
 					</div>
 					<div id="alert-error" class="alert alert-danger" style="display: none;">
-		  				<strong>Error!</strong> Request to Servo failed with an error.
-		  				<p class="details"></p>
+		  				<span class="details"></span>. <span class="message"></span>
 					</div>
 
 					<div id="alert-info" class="alert alert-info" style="display: none;">
-		  				<strong><p id="info-resp"></p></strong> Request to Servo completed successfully.
-		  				<p class="details"></p>
+		  				<span class="details"></span>. Completed successfully.
 					</div>
 					
 					<div class="form-group">
@@ -115,15 +112,24 @@
 					</div>
 					<div class="form-group">
 						<label class="col-md-4 control-label">
-							Content
+							Request 
 						</label>  
-						<div class="col-md-5">
+						<div class="col-md-3">
 							<textarea id="body" 
 								name="body"
 								rows=6
 								class="form-control" readonly></textarea>
 							<span class="help-block">
-								Content of the item as received from or sent to a http request.
+								Payload to be sent to Servo
+							</span>  
+						</div>
+						<div class="col-md-3">
+							<textarea id="response" 
+								name="response"
+								rows=6
+								class="form-control" readonly></textarea>
+							<span class="help-block">
+								Contents of the response from servo
 							</span>  
 						</div>
 						<div class="col-md-1">
