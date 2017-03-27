@@ -134,13 +134,13 @@ void servo_response_json(struct http_request * req,
 }
 
 void
-servo_response_error(struct http_request *req,
+servo_response_status(struct http_request *req,
 			const unsigned int http_code,
-			const char* err)
+			const char* msg)
 {
     json_t* data;
     
-    data = json_pack("{s:i s:s}", "code", http_code, "message", err);
+    data = json_pack("{s:i s:s}", "code", http_code, "message", msg);
     servo_response_json(req, http_code, data);
     json_decref(data);
 }

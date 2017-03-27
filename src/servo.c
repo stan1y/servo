@@ -67,7 +67,14 @@ servo_create_context(struct http_request *req)
 void
 servo_clear_context(struct servo_context *ctx)
 {
-
+    if (ctx->err != NULL)
+        kore_free(ctx->err);
+    if (ctx->val_str != NULL)
+        kore_free(ctx->val_str);
+    if (ctx->val_json != NULL)
+        json_decref(ctx->val_json);
+    if (ctx->val_blob != NULL)
+        kore_free(ctx->val_blob);
 }
 
 int
@@ -145,14 +152,14 @@ int servo_start(struct http_request *req)
         if (!http_request_header(req, "Origin", &origin) && !CONFIG->public_mode) {
             kore_log(LOG_NOTICE, "%s: disallow access - no 'Origin' header sent",
                 __FUNCTION__);
-            servo_response_error(req, 403, "'Origin' header is not found");
+            servo_response_status(req, 403, "'Origin' header is not found");
             return (KORE_RESULT_OK);
         }
         if (strcmp(origin, CONFIG->allow_origin) != 0) {
             kore_log(LOG_NOTICE, "%s: disallow access - 'Origin' header mismatch %s != %s",
                 __FUNCTION__,
                 origin, CONFIG->allow_origin);
-            servo_response_error(req, 403, "Origin Access Denied");
+            servo_response_status(req, 403, "Origin Access Denied");
             return (KORE_RESULT_OK);
         }
     }
@@ -170,7 +177,7 @@ int servo_start(struct http_request *req)
         if (strcmp(saddr, CONFIG->allow_ipaddr) != 0) {
             kore_log(LOG_NOTICE, "%s: disallow access - Client IP mismatch %s != %s",
                 __FUNCTION__, saddr, CONFIG->allow_ipaddr);
-            servo_response_error(req, 403, "Client Access Denied");
+            servo_response_status(req, 403, "Client Access Denied");
             return (KORE_RESULT_OK);
         }
     }
@@ -324,7 +331,7 @@ int state_error(struct http_request *req)
         http_status_text(ctx->status), 
         servo_sql_state(ctx->sql.state),
         ctx->session.client);
-    servo_response_error(req, ctx->status, 
+    servo_response_status(req, ctx->status, 
         ctx->err != NULL ? ctx->err : http_status_text(ctx->status));
 
     servo_clear_context(ctx);
@@ -335,7 +342,7 @@ int state_error(struct http_request *req)
 int state_done(struct http_request *req)
 {
     struct servo_context    *ctx = req->hdlr_extra;
-    char                    *output;
+    const char                    *output;
 
     kore_pgsql_cleanup(&ctx->sql);
 
@@ -354,7 +361,24 @@ int state_done(struct http_request *req)
         /* reply 201 Created on POSTs */
         if (req->method == HTTP_METHOD_POST)
             ctx->status = 201;
-        http_response(req, ctx->status, "", 0);
+
+        output = http_status_text(ctx->status);
+        switch(ctx->out_content_type) {
+            default:
+            case SERVO_CONTENT_BLOB:
+                break;
+
+            case SERVO_CONTENT_STRING:
+                http_response(req, ctx->status,
+                              output,
+                              strlen(output));
+                break;
+            case SERVO_CONTENT_JSON:
+                servo_response_status(req, ctx->status,
+                                     output);
+                break;
+        }
+
     }
     else if (servo_is_item_request(req)) {
 
@@ -383,7 +407,7 @@ int state_done(struct http_request *req)
                 break;
 
             case SERVO_CONTENT_BLOB:
-                servo_response_error(req, 403, http_status_text(403));
+                servo_response_status(req, 403, http_status_text(403));
                 break;
 
         };

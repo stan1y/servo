@@ -87,14 +87,14 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
             val_str = kore_buf_stringify(body, NULL);
             val_json = json_loads(val_str, JSON_ALLOW_NUL, &jerr);
             if (val_json == NULL) {
-                kore_buf_free(body);
-                kore_log(LOG_ERR,
-                    "%s: broken JSON received %s at line: %d, column: %d, pos: %d, source: '%s'",
-                    __FUNCTION__,
-                    jerr.text, jerr.line, jerr.column, jerr.position, jerr.source);
-                ctx->status = 400;
-                req->fsm_state = REQ_STATE_ERROR;
-                return (HTTP_STATE_CONTINUE);
+                ctx->err = kore_malloc(512);
+                snprintf(ctx->err, 512,
+                         "%s at line: %d, column: %d, pos: %d",
+                         jerr.text, jerr.line, jerr.column, jerr.position);
+                kore_log(LOG_ERR, "%s: broken json - %s",
+                         __FUNCTION__,
+                         ctx->err);
+                return (KORE_RESULT_ERROR);
             }
             rc = kore_pgsql_query_params(&ctx->sql, 
                                 (const char*)asset_post_item_sql, 
@@ -149,7 +149,36 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
     return rc;
 }
 
-int state_query_item(struct http_request *req)
+void
+servo_request_content_types(struct http_request *req)
+{
+    char                    *accept = NULL;
+    char                    *content_type = NULL;
+    //char                    *accept_encoding = NULL;
+    struct servo_context    *ctx;
+
+    ctx = (struct servo_context*)req->hdlr_extra;
+    if (http_request_header(req, "Accept", &accept)) {
+        kore_log(LOG_DEBUG, "Accept: %s", accept);
+        if (strstr(accept, CONTENT_TYPE_JSON) != NULL)
+            ctx->out_content_type = SERVO_CONTENT_JSON;
+        if (strstr(accept, CONTENT_TYPE_BLOB) != NULL)
+            ctx->out_content_type = SERVO_CONTENT_BLOB;
+    }
+
+    if (http_request_header(req, "Content-Type", &content_type)) {
+        kore_log(LOG_DEBUG, "Content-Type: %s", content_type);
+        if (strstr(content_type, CONTENT_TYPE_JSON) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_JSON;
+        if (strstr(content_type, CONTENT_TYPE_BLOB) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_BLOB;
+    }
+
+    /* fixme: handle Accept-Encoding here */
+}
+
+int
+state_query_item(struct http_request *req)
 {
     int                      rc, too_big;
     struct servo_context    *ctx;
@@ -170,6 +199,7 @@ int state_query_item(struct http_request *req)
         return (rc == KORE_RESULT_OK ? HTTP_STATE_COMPLETE : HTTP_STATE_ERROR);
     }
 
+    servo_request_content_types(req);
     body = servo_request_data(req);
 
     /* Check size limitations */
@@ -195,6 +225,7 @@ int state_query_item(struct http_request *req)
     if (too_big) {
         kore_buf_free(body);
         ctx->status = 403;
+        ctx->err = kore_strdup("Request is too large");
         req->fsm_state = REQ_STATE_ERROR;
         return (HTTP_STATE_CONTINUE);
     }
@@ -219,8 +250,18 @@ int state_query_item(struct http_request *req)
     kore_buf_free(body);
 
     if (rc != KORE_RESULT_OK) {
-        kore_pgsql_logerror(&ctx->sql);
-        return HTTP_STATE_ERROR;
+        /* go to error handler
+           PGSQL errors are internal 500
+           the other case is broken json 
+         */
+        req->fsm_state = REQ_STATE_ERROR;
+        if (ctx->sql.state == KORE_PGSQL_STATE_ERROR) {
+            kore_pgsql_logerror(&ctx->sql);
+            ctx->status = 500;
+        }
+        else
+            ctx->status = 400;
+        return (HTTP_STATE_CONTINUE);
     }
 
     /* Wait for item request completition */
@@ -270,7 +311,7 @@ int state_read_item(struct http_request *req)
         /* found existing session record */
         val = kore_pgsql_getvalue(&ctx->sql, 0, 0);
         if (val != NULL && strlen(val) > 0) {
-            ctx->val_str = val;
+            ctx->val_str = kore_strdup(val);
             ctx->val_sz = strlen(val);
         }
 
@@ -282,12 +323,23 @@ int state_read_item(struct http_request *req)
                 kore_log(LOG_ERR, "malformed json received from store");
                 return (HTTP_STATE_ERROR);
             }
+            ctx->val_sz = strlen(val);
         }
         val = kore_pgsql_getvalue(&ctx->sql, 0, 2);
         if (val != NULL && strlen(val) > 0) {
-            ctx->val_blob = val;
+            ctx->val_blob = kore_strdup(val);
             ctx->val_sz = strlen(ctx->val_blob);
         }
+
+        /* since we've read item, update in_content_type
+           because it indicated type we store
+         */
+        if (ctx->val_str != NULL)
+            ctx->in_content_type = SERVO_CONTENT_STRING;
+        if (ctx->val_json != NULL)
+            ctx->in_content_type = SERVO_CONTENT_JSON;
+        if (ctx->val_blob != NULL)
+            ctx->in_content_type = SERVO_CONTENT_BLOB;
     }
     else {
         kore_log(LOG_ERR, "%s: selected %d rows, 1 expected",

@@ -31,9 +31,10 @@
 
 int					 servo_is_item_request(struct http_request *);
 struct kore_buf		*servo_request_data(struct http_request *);
+void				 servo_request_content_types(struct http_request *);
 void				 servo_response_json(struct http_request *,
 						const unsigned int, const json_t *);
-void				 servo_response_error(struct http_request *,
+void				 servo_response_status(struct http_request *,
 						const unsigned int, const char *);
 void				 servo_handle_pg_error(struct http_request *);
 #endif //_SERVO_UTIL_H_
