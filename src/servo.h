@@ -8,7 +8,6 @@
 #include <kore/pgsql.h>
 #include <jansson.h>
 
-#include "util.h"
 
 #define CLIENT_LEN 255
 #define ITEM_KEY_LEN 255
@@ -49,6 +48,7 @@ struct servo_config {
 	int			 public_mode;
 	size_t		 session_ttl;
 	size_t		 max_sessions;
+    char        *jwt_key;
 
 	/* values size limits */
 	size_t		 string_size;
@@ -86,6 +86,7 @@ struct servo_context	*servo_create_context(struct http_request *);
 void                     servo_clear_context(struct servo_context *);
 int						 servo_put_session(struct servo_session *);
 int 					 servo_purge_session(struct servo_session *);
+char                    *servo_session_token(struct servo_session *);
 
 int						 servo_init(int state);
 int						 servo_start(struct http_request *);
@@ -102,16 +103,12 @@ int						 servo_is_redirect(struct servo_context *);
 
 /* States */
 
-#define REQ_STATE_C_SESSION     0
-#define REQ_STATE_Q_SESSION     1
-#define REQ_STATE_W_SESSION     2
-#define REQ_STATE_R_SESSION     3
-#define REQ_STATE_C_ITEM        4
-#define REQ_STATE_Q_ITEM        5
-#define REQ_STATE_W_ITEM        6
-#define REQ_STATE_R_ITEM        7
-#define REQ_STATE_ERROR         8
-#define REQ_STATE_DONE          9
+#define REQ_STATE_C_ITEM        0
+#define REQ_STATE_Q_ITEM        1
+#define REQ_STATE_W_ITEM        2
+#define REQ_STATE_R_ITEM        3
+#define REQ_STATE_ERROR         4
+#define REQ_STATE_DONE          5
 
 int					 state_connect_session(struct http_request *);
 int				 	 state_query_session(struct http_request *);

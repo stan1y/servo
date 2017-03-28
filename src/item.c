@@ -29,7 +29,7 @@ int state_handle_get(struct http_request *req)
                                 ctx->session.client,
                                 strlen(ctx->session.client),
                                 PGSQL_FORMAT_TEXT,
-                                // path
+                                // key
                                 req->path,
                                 strlen(req->path),
                                 PGSQL_FORMAT_TEXT);

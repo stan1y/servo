@@ -1,14 +1,11 @@
 #include "servo.h"
 #include "util.h"
 #include "assets.h"
+#include "jwt.h"
 
 struct servo_config *CONFIG;
 
 struct http_state   servo_session_states[] = {
-    { "REQ_STATE_C_SESSION",  state_connect_session },
-    { "REQ_STATE_Q_SESSION",  state_query_session },
-    { "REQ_STATE_W_SESSION",  state_wait_session },
-    { "REQ_STATE_R_SESSION",  state_read_session },
 
     { "REQ_STATE_C_ITEM",     state_connect_item },
     { "REQ_STATE_Q_ITEM",	  state_query_item },
@@ -111,13 +108,20 @@ servo_init(int state)
     CONFIG->blob_size = 4096;
     CONFIG->allow_origin = NULL;
     CONFIG->allow_ipaddr = NULL;
+    CONFIG->jwt_key = NULL;
 
     if (!servo_read_config(CONFIG)) {
         kore_log(LOG_ERR, "%s: servo is not configured", __FUNCTION__);
         return (KORE_RESULT_ERROR);
     }
 
+    if (CONFIG->jwt_key == NULL) {
+      CONFIG->jwt_key = kore_malloc(16);
+      CONFIG->jwt_key = servo_random_string(CONFIG->jwt_key, 16);
+    }
+
     kore_log(LOG_NOTICE, "started worker pid: %d", (int)getpid());
+    kore_log(LOG_NOTICE, "  web token key: %s", CONFIG->jwt_key);
     kore_log(LOG_NOTICE, "  public mode: %s", CONFIG->public_mode != 0 ? "yes" : "no");
     kore_log(LOG_NOTICE, "  session ttl: %zu seconds", CONFIG->session_ttl);
     kore_log(LOG_NOTICE, "  max sessions: %zu", CONFIG->max_sessions);
@@ -137,10 +141,11 @@ servo_init(int state)
  */
 int servo_start(struct http_request *req)
 {
-    char                    *usrclient = NULL, *origin = NULL;
+    char                    *token = NULL, *origin = NULL;
     char                     saddr[INET6_ADDRSTRLEN];
     uuid_t                   cid;
     struct servo_context    *ctx;
+    struct json_web_token   *jwt;
 
     if (req->hdlr_extra == NULL) {
        req->hdlr_extra = servo_create_context(req);
@@ -182,31 +187,27 @@ int servo_start(struct http_request *req)
         }
     }
 
-    if (strlen(ctx->session.client) == 0) {
-        /* Read client ID from header and cookie */
-        if (http_request_header(req, "X-Servo-Client", &usrclient)) {
-            kore_strlcpy(ctx->session.client, usrclient, sizeof(ctx->session.client));
-        }
-        if (usrclient == NULL) {
-            http_populate_cookies(req);
-            if (http_request_cookie(req, "Servo-Client", &usrclient)) {
-                kore_strlcpy(ctx->session.client, usrclient, sizeof(ctx->session.client));
-            }
-        }
-        if (usrclient == NULL) {
-            /* Generate new client id and init fresh session */
-            uuid_generate(cid);
-            memset(ctx->session.client, 0, sizeof(ctx->session.client));
-            uuid_unparse(cid, ctx->session.client);
-            kore_log(LOG_DEBUG, "new client without identifier, generated {%s}",
-                ctx->session.client);
-        }
-
-        /* Pass generated ID to client */        
-        http_response_header(req, "X-Servo-Client", ctx->session.client);
-        http_response_cookie(req, "Servo-Client", ctx->session.client,
-            HTTP_COOKIE_SECURE | HTTP_COOKIE_HTTPONLY);
+    http_populate_cookies(req);
+    jwt = NULL;
+    if (http_request_cookie(req, "X-Servo-Token", &token)) {
+        /* parse and verify json web token */
+        jwt = jwt_parse(token);
     }
+    
+    if (jwt == NULL) {
+        /* Generate new client token and init fresh session */
+        uuid_generate(cid);
+        memset(ctx->session.client, 0, sizeof(ctx->session.client));
+        uuid_unparse(cid, ctx->session.client);
+        kore_log(LOG_DEBUG, "new client without identifier, generated {%s}",
+            ctx->session.client);
+    }
+    
+    token = servo_session_token(&ctx->session);
+    http_response_cookie(req, "X-Servo-Token",
+                         token,
+                         HTTP_COOKIE_SECURE | HTTP_COOKIE_HTTPONLY);
+    kore_free(token);
 
     return (http_state_run(servo_session_states, servo_session_states_size, req));
 }
@@ -449,4 +450,22 @@ servo_item_to_json(struct servo_context *ctx)
 {
     /* FIXME: apply json selectors here */
     return servo_item_to_string(ctx);
+}
+
+char *
+servo_session_token(struct servo_session *s)
+{
+    struct kore_buf *jwtbuf;
+    json_t          *data;
+    char            *sdata, *jwt;
+
+    data = json_pack("{s:s s:i}",
+                     "id", s->client,
+                     "exp", s->expire_on);
+    sdata = json_dumps(data, 0);
+    json_decref(data);
+    jwtbuf = jwt_build(JWT_ALG_HS256, sdata, strlen(sdata));
+    jwt = kore_strdup(kore_buf_stringify(jwtbuf, NULL));
+    kore_buf_free(jwtbuf);
+    return jwt;
 }

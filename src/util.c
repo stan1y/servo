@@ -33,8 +33,9 @@ static int servo_read_config_handler(void* user, const char* section, const char
         cfg->allow_origin = kore_strdup(value);
     } else if (MATCH("filter", "ip_address")) {
         cfg->allow_ipaddr = kore_strdup(value);
-    }
-    else {
+    } else if (MATCH("session", "jwt_key")) {
+        cfg->jwt_key = kore_strdup(value);
+    } else {
         kore_log(LOG_ERR, "unknown option \"%s.%s\"",
             section, name);
     }
@@ -174,4 +175,19 @@ servo_is_item_request(struct http_request *req)
 {
     return (strcmp(req->path, ROOT_PATH) != 0 &&
             strcmp(req->path, CONSOLE_JS_PATH) != 0);
+}
+
+char *
+servo_random_string(char *str, size_t size)
+{
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK0987654321";
+    if (size) {
+        --size;
+        for (size_t n = 0; n < size; n++) {
+            int key = rand() % (int) (sizeof charset - 1);
+            str[n] = charset[key];
+        }
+        str[size] = '\0';
+    }
+    return str;
 }

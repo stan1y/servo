@@ -28,7 +28,6 @@
 #define SERVO_CONTENT_JSON		1
 #define SERVO_CONTENT_BLOB		2
 
-
 int					 servo_is_item_request(struct http_request *);
 struct kore_buf		*servo_request_data(struct http_request *);
 void				 servo_request_content_types(struct http_request *);
@@ -37,4 +36,6 @@ void				 servo_response_json(struct http_request *,
 void				 servo_response_status(struct http_request *,
 						const unsigned int, const char *);
 void				 servo_handle_pg_error(struct http_request *);
+
+char        *servo_random_string(char *, size_t);
 #endif //_SERVO_UTIL_H_
