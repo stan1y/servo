@@ -1,32 +1,31 @@
 #include "servo.h"
 #include "util.h"
 #include "assets.h"
-#include "jwt.h"
 
 struct servo_config *CONFIG;
 
 struct http_state   servo_session_states[] = {
 
-    { "REQ_STATE_C_ITEM",     state_connect_item },
-    { "REQ_STATE_Q_ITEM",	  state_query_item },
-    { "REQ_STATE_W_ITEM",	  state_wait_item },
-    { "REQ_STATE_R_ITEM",     state_read_item },
+    { "REQ_STATE_INIT",       servo_state_init  },
+    { "REQ_STATE_QUERY",	  servo_state_query },
+    { "REQ_STATE_WAIT",	      servo_state_wait  },
+    { "REQ_STATE_READ",       servo_state_read  },
 
     { "REQ_STATE_ERROR",      state_error },
-    { "REQ_STATE_DONE",		  state_done },
+    { "REQ_STATE_DONE",		  state_done  },
 };
 
 #define servo_session_states_size (sizeof(servo_session_states) \
     / sizeof(servo_session_states[0]))
 
 const char *
-servo_state(int s) 
+servo_state_text(int s) 
 {
     return servo_session_states[s].name;
 }
 
 const char *
-servo_sql_state(int s)
+sql_state_text(int s)
 {   
     return SQL_STATE_NAMES[s];
 }
@@ -34,7 +33,7 @@ servo_sql_state(int s)
 const char *
 servo_request_state(struct http_request * req)
 {
-    return servo_state(req->fsm_state);
+    return servo_state_text(req->fsm_state);
 }
 
 struct servo_context *
@@ -43,12 +42,10 @@ servo_create_context(struct http_request *req)
     struct servo_context *ctx;
 
     ctx = kore_malloc(sizeof(struct servo_context));
-    memset(ctx->session.client, 0, sizeof(ctx->session.client));
-    memset(&ctx->sql, 0, sizeof(struct kore_pgsql));
-    
+    ctx->client = NULL;
     ctx->status = 200;
     ctx->err = NULL;
-    ctx->session.expire_on = 0;
+    ctx->token = NULL;
     ctx->val_sz = 0;
     ctx->val_str = NULL;
     ctx->val_json = NULL;
@@ -72,26 +69,10 @@ servo_clear_context(struct servo_context *ctx)
         json_decref(ctx->val_json);
     if (ctx->val_blob != NULL)
         kore_free(ctx->val_blob);
+    if (ctx->token)
+        jwt_free(ctx->token);
 }
 
-int
-servo_is_success(struct servo_context *ctx)
-{
-    if (ctx->status >= 200 && ctx->status < 300) {
-        return 1;
-    }
-
-    return 0;
-}
-
-int
-servo_is_redirect(struct servo_context *ctx)
-{
-    if (ctx->status >= 300 && ctx->status < 400)
-        return 1;
-
-    return 0;
-}
 
 int
 servo_init(int state)
@@ -116,8 +97,10 @@ servo_init(int state)
     }
 
     if (CONFIG->jwt_key == NULL) {
-      CONFIG->jwt_key = kore_malloc(16);
-      CONFIG->jwt_key = servo_random_string(CONFIG->jwt_key, 16);
+        CONFIG->jwt_key_len = 16;
+        CONFIG->jwt_key = kore_malloc(CONFIG->jwt_key_len);
+        CONFIG->jwt_key = servo_random_string(CONFIG->jwt_key,
+                                              CONFIG->jwt_key_len);
     }
 
     kore_log(LOG_NOTICE, "started worker pid: %d", (int)getpid());
@@ -135,17 +118,136 @@ servo_init(int state)
     return (KORE_RESULT_OK);
 }
 
+int
+servo_init_context(struct servo_context *ctx)
+{
+    unsigned char        *client_id;
+
+    /* Generate new client token and init fresh session */
+    client_id = NULL;
+    uuid_generate(client_id);
+
+    ctx->client = kore_malloc(CLIENT_MAX);
+    uuid_unparse(client_id, ctx->client);
+    kore_log(LOG_DEBUG, "new client without identifier, generated {%s}",
+             ctx->client);
+
+    if (jwt_new(&ctx->token) != 0) {
+        kore_log(LOG_ERR, "%s: failed to allocate jwt",
+                 __FUNCTION__);
+        ctx->token = NULL;
+        return (KORE_RESULT_ERROR);
+    }
+
+    if (jwt_set_alg(ctx->token, JWT_ALG_HS256,
+                     (const unsigned char *)CONFIG->jwt_key,
+                     CONFIG->jwt_key_len) != 0) {
+        kore_log(LOG_ERR, "%s: failed set token alg",
+                 __FUNCTION__);
+        jwt_free(ctx->token);
+        ctx->token = NULL;
+        return (KORE_RESULT_ERROR);
+    }
+
+    if (jwt_add_grant(ctx->token, "id", ctx->client) != 0) {
+        kore_log(LOG_ERR, "%s: failed add grant to jwt",
+                 __FUNCTION__);
+        jwt_free(ctx->token);
+        ctx->token = NULL;
+        return (KORE_RESULT_ERROR);
+    }
+
+    return (KORE_RESULT_OK);
+}
+
+void
+servo_write_context_token(struct http_request *req)
+{
+    struct servo_context    *ctx;
+    char                    *token;
+    struct kore_buf         *token_hdr;
+
+    ctx = req->hdlr_extra;
+    token = jwt_encode_str(ctx->token);
+    token_hdr = kore_buf_alloc(HTTP_HEADER_MAX_LEN);
+    kore_buf_append(token_hdr, AUTH_TYPE_PREFIX, strlen(AUTH_TYPE_PREFIX));
+    kore_buf_append(token_hdr, token, strlen(token));
+    free(token);
+
+    http_response_header(req, AUTH_HEADER,
+                         kore_buf_stringify(token_hdr, NULL));
+}
+
+int
+servo_read_context_token(struct http_request *req)
+{
+    int                      n;
+    struct servo_context    *ctx;
+    char                    *token_hdr,
+                            *hdr_parts[3];
+    const char              *client_id;
+
+    ctx = req->hdlr_extra;
+    if (ctx->token != NULL || ctx->client != NULL) {
+        kore_log(LOG_ERR, "%s: trying to read non-empty context",
+                          __FUNCTION__);
+        return (KORE_RESULT_ERROR);
+    }
+
+    if (!http_request_header(req, AUTH_HEADER, &token_hdr)) {
+        kore_log(LOG_DEBUG, "no token header sent");
+        return (KORE_RESULT_ERROR);
+    }
+
+    n = kore_split_string(token_hdr, " ", hdr_parts, 2);
+    if (n != 2) {
+        kore_log(LOG_ERR, "%s: invalid header format - '%s'",
+                          __FUNCTION__,
+                          token_hdr);
+        return (KORE_RESULT_ERROR);
+    }
+
+    kore_log(LOG_DEBUG, "token of '%s' = '%s'",
+                        hdr_parts[0],
+                        hdr_parts[1]);
+    
+    /* parse and verify json web token */
+    if (jwt_decode(&ctx->token, 
+                    hdr_parts[1],
+                    (const unsigned char *)CONFIG->jwt_key,
+                    CONFIG->jwt_key_len) != 0) {
+        kore_log(LOG_ERR, "%s: invalid json web token received: '%s'",
+                 __FUNCTION__,
+                 hdr_parts[1]);
+        return (KORE_RESULT_ERROR);
+    }
+
+    client_id = NULL;
+    client_id = jwt_get_grant(ctx->token, "id");
+    if (client_id == NULL) {
+        kore_log(LOG_ERR, "%s: failed to get client id from token",
+                 __FUNCTION__);
+        jwt_free(ctx->token);
+        ctx->token = NULL;
+        ctx->client = NULL;
+        return (KORE_RESULT_ERROR);
+    }
+
+    ctx->client = kore_strdup(client_id);
+    kore_log(LOG_NOTICE, "existing client {%s}", ctx->client);
+    return (KORE_RESULT_OK);
+}
 
 /**
  * Servo Session API entry point
  */
-int servo_start(struct http_request *req)
+int 
+servo_start(struct http_request *req)
 {
-    char                    *token = NULL, *origin = NULL;
+    char                    *origin = NULL;
     char                     saddr[INET6_ADDRSTRLEN];
-    uuid_t                   cid;
     struct servo_context    *ctx;
-    struct json_web_token   *jwt;
+    int                      rc;
 
     if (req->hdlr_extra == NULL) {
        req->hdlr_extra = servo_create_context(req);
@@ -153,7 +255,7 @@ int servo_start(struct http_request *req)
     ctx = req->hdlr_extra;
 
     /* Filter by Origin header */
-    if (servo_is_item_request(req) && CONFIG->allow_origin != NULL) {
+    if (CONFIG->allow_origin != NULL) {
         if (!http_request_header(req, "Origin", &origin) && !CONFIG->public_mode) {
             kore_log(LOG_NOTICE, "%s: disallow access - no 'Origin' header sent",
                 __FUNCTION__);
@@ -187,27 +289,29 @@ int servo_start(struct http_request *req)
         }
     }
 
-    http_populate_cookies(req);
-    jwt = NULL;
-    if (http_request_cookie(req, "X-Servo-Token", &token)) {
-        /* parse and verify json web token */
-        jwt = jwt_parse(token);
+    // read header and parse json web token
+    if (!servo_read_context_token(req)) {
+        if (!servo_init_context(ctx)) {
+            // finish request with 500 error 
+            servo_clear_context(ctx);
+            servo_response_status(req, 500, http_status_text(500));
+            return (KORE_RESULT_OK);
+        }
     }
     
-    if (jwt == NULL) {
-        /* Generate new client token and init fresh session */
-        uuid_generate(cid);
-        memset(ctx->session.client, 0, sizeof(ctx->session.client));
-        uuid_unparse(cid, ctx->session.client);
-        kore_log(LOG_DEBUG, "new client without identifier, generated {%s}",
-            ctx->session.client);
+    servo_write_context_token(req);
+    servo_read_content_types(req);
+
+    // render console html or stats for client bootstrap
+    if (!servo_is_item_request(req)) {
+        if (CONFIG->public_mode && ctx->out_content_type == SERVO_CONTENT_HTML)
+            rc = servo_render_console(req);
+        else
+            rc = servo_render_stats(req);
+
+        servo_clear_context(ctx);
+        return rc;
     }
-    
-    token = servo_session_token(&ctx->session);
-    http_response_cookie(req, "X-Servo-Token",
-                         token,
-                         HTTP_COOKIE_SECURE | HTTP_COOKIE_HTTPONLY);
-    kore_free(token);
 
     return (http_state_run(servo_session_states, servo_session_states_size, req));
 }
@@ -218,13 +322,15 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
     struct servo_context    *ctx = req->hdlr_extra;
     
     kore_pgsql_cleanup(&ctx->sql);
-    if (!kore_pgsql_query_init(&ctx->sql, req, DBNAME, KORE_PGSQL_ASYNC)) {
+    kore_pgsql_init(&ctx->sql);
+    kore_pgsql_bind_request(&ctx->sql, req);
+    if (!kore_pgsql_setup(&ctx->sql, DBNAME, KORE_PGSQL_ASYNC)) {
 
         /* If the state was still INIT, we'll try again later. */
         if (ctx->sql.state == KORE_PGSQL_STATE_INIT) {
             req->fsm_state = retry_step;
             kore_log(LOG_ERR, "retrying connection, sql state is '%s'",
-                servo_sql_state(ctx->sql.state));
+                sql_state_text(ctx->sql.state));
             return (HTTP_STATE_RETRY);
         }
 
@@ -234,7 +340,7 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
         req->fsm_state = error_step;
         kore_log(LOG_ERR, "%s: failed to connect to database, sql state is '%s'",
             __FUNCTION__,
-            servo_sql_state(ctx->sql.state));
+            sql_state_text(ctx->sql.state));
         kore_log(LOG_NOTICE,
             "hint: check database connection string in the configuration file.");
     }
@@ -292,7 +398,7 @@ servo_wait(struct http_request *req, int read_step, int complete_step, int error
         break;
 
     default:
-        kore_pgsql_continue(req, &ctx->sql);
+        kore_pgsql_continue(&ctx->sql);
         break;
     }
 
@@ -315,7 +421,7 @@ int state_error(struct http_request *req)
             ctx->status,
             msg,
             req->path,
-            ctx->session.client);
+            ctx->client);
 
         http_response(req, ctx->status, msg, sizeof(msg));
         servo_clear_context(ctx);
@@ -330,8 +436,8 @@ int state_error(struct http_request *req)
     kore_log(LOG_ERR, "%d: %s, sql state: %s to {%s}", 
         ctx->status, 
         http_status_text(ctx->status), 
-        servo_sql_state(ctx->sql.state),
-        ctx->session.client);
+        sql_state_text(ctx->sql.state),
+        ctx->client);
     servo_response_status(req, ctx->status, 
         ctx->err != NULL ? ctx->err : http_status_text(ctx->status));
 
@@ -387,7 +493,7 @@ int state_done(struct http_request *req)
             ctx->val_sz,
             SERVO_CONTENT_NAMES[ctx->in_content_type],
             SERVO_CONTENT_NAMES[ctx->out_content_type],
-            ctx->session.client);
+            ctx->client);
         
         switch(ctx->out_content_type) {
             default:
@@ -421,7 +527,7 @@ int state_done(struct http_request *req)
     kore_log(LOG_DEBUG, "%d: %s to {%s}",
         ctx->status,
         http_status_text(ctx->status),
-        ctx->session.client);
+        ctx->client);
 
     servo_clear_context(ctx);
     return (HTTP_STATE_COMPLETE);
@@ -450,22 +556,4 @@ servo_item_to_json(struct servo_context *ctx)
 {
     /* FIXME: apply json selectors here */
     return servo_item_to_string(ctx);
-}
-
-char *
-servo_session_token(struct servo_session *s)
-{
-    struct kore_buf *jwtbuf;
-    json_t          *data;
-    char            *sdata, *jwt;
-
-    data = json_pack("{s:s s:i}",
-                     "id", s->client,
-                     "exp", s->expire_on);
-    sdata = json_dumps(data, 0);
-    json_decref(data);
-    jwtbuf = jwt_build(JWT_ALG_HS256, sdata, strlen(sdata));
-    jwt = kore_strdup(kore_buf_stringify(jwtbuf, NULL));
-    kore_buf_free(jwtbuf);
-    return jwt;
 }

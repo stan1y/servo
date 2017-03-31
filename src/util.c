@@ -35,6 +35,7 @@ static int servo_read_config_handler(void* user, const char* section, const char
         cfg->allow_ipaddr = kore_strdup(value);
     } else if (MATCH("session", "jwt_key")) {
         cfg->jwt_key = kore_strdup(value);
+        cfg->jwt_key_len = strlen(cfg->jwt_key);
     } else {
         kore_log(LOG_ERR, "unknown option \"%s.%s\"",
             section, name);
@@ -178,6 +179,53 @@ servo_is_item_request(struct http_request *req)
 }
 
 char *
+servo_format_date(time_t* epoch)
+{
+    struct tm       *t;
+    static char      sdate[80];
+
+    t = gmtime(epoch);
+    strftime(sdate, sizeof(sdate), "%a %Y-%m-%d %H:%M:%S %Z", t);
+    return sdate;
+}
+
+void
+servo_read_content_types(struct http_request *req)
+{
+    char                    *accept = NULL;
+    char                    *content_type = NULL;
+    //char                    *accept_encoding = NULL;
+    struct servo_context    *ctx;
+
+    ctx = (struct servo_context*)req->hdlr_extra;
+    if (http_request_header(req, "Accept", &accept)) {
+        kore_log(LOG_DEBUG, "Accept: %s", accept);
+        if (strstr(accept, CONTENT_TYPE_HTML) != NULL)
+            ctx->out_content_type = SERVO_CONTENT_HTML;
+        else if (strstr(accept, CONTENT_TYPE_JSON) != NULL)
+            ctx->out_content_type = SERVO_CONTENT_JSON;
+        else if (strstr(accept, CONTENT_TYPE_BLOB) != NULL)
+            ctx->out_content_type = SERVO_CONTENT_BLOB;
+        else
+            ctx->out_content_type = SERVO_CONTENT_STRING;
+    }
+
+    if (http_request_header(req, "Content-Type", &content_type)) {
+        kore_log(LOG_DEBUG, "Content-Type: %s", content_type);
+        if (strstr(content_type, CONTENT_TYPE_HTML) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_HTML;
+        else if (strstr(content_type, CONTENT_TYPE_JSON) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_JSON;
+        else if (strstr(content_type, CONTENT_TYPE_BLOB) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_BLOB;
+        else
+            ctx->in_content_type = SERVO_CONTENT_STRING;
+    }
+
+    /* fixme: handle Accept-Encoding here */
+}
+
+char *
 servo_random_string(char *str, size_t size)
 {
     const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK0987654321";
@@ -190,4 +238,23 @@ servo_random_string(char *str, size_t size)
         str[size] = '\0';
     }
     return str;
+}
+
+int
+servo_is_success(struct servo_context *ctx)
+{
+    if (ctx->status >= 200 && ctx->status < 300) {
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+servo_is_redirect(struct servo_context *ctx)
+{
+    if (ctx->status >= 300 && ctx->status < 400)
+        return 1;
+
+    return 0;
 }

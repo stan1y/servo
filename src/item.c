@@ -3,11 +3,11 @@
 #include "assets.h"
 
 int
-state_connect_item(struct http_request *req)
+servo_state_init(struct http_request *req)
 {
     return servo_connect_db(req,
-                            REQ_STATE_C_ITEM,
-                            REQ_STATE_Q_ITEM,
+                            REQ_STATE_INIT,
+                            REQ_STATE_QUERY,
                             REQ_STATE_ERROR);
 }
 
@@ -20,14 +20,14 @@ int state_handle_get(struct http_request *req)
     struct servo_context    *ctx;
 
     ctx = (struct servo_context*)req->hdlr_extra;
-    kore_log(LOG_NOTICE, "GET %s for {%s}", req->path, ctx->session.client);
+    kore_log(LOG_NOTICE, "GET %s for {%s}", req->path, ctx->client);
     return kore_pgsql_query_params(&ctx->sql, 
                                 (const char*)asset_get_item_sql, 
                                 PGSQL_FORMAT_TEXT,
                                 2,
                                 // client
-                                ctx->session.client,
-                                strlen(ctx->session.client),
+                                ctx->client,
+                                strlen(ctx->client),
                                 PGSQL_FORMAT_TEXT,
                                 // key
                                 req->path,
@@ -53,7 +53,7 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
     kore_log(LOG_NOTICE, "POST %s, %zu bytes (%s) read from {%s}",
         req->path, body->offset,
         SERVO_CONTENT_NAMES[ctx->in_content_type],
-        ctx->session.client);
+        ctx->client);
 
     switch(ctx->in_content_type) {
         default:
@@ -64,8 +64,8 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
                                 PGSQL_FORMAT_TEXT,
                                 5,
                                 // client
-                                ctx->session.client,
-                                strlen(ctx->session.client),
+                                ctx->client,
+                                strlen(ctx->client),
                                 PGSQL_FORMAT_TEXT,
                                 // key
                                 req->path,
@@ -101,8 +101,8 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
                                 PGSQL_FORMAT_TEXT,
                                 5,
                                 // client
-                                ctx->session.client,
-                                strlen(ctx->session.client),
+                                ctx->client,
+                                strlen(ctx->client),
                                 PGSQL_FORMAT_TEXT,
                                 // key
                                 req->path,
@@ -127,8 +127,8 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
                                 PGSQL_FORMAT_TEXT,
                                 5,
                                 // client
-                                ctx->session.client,
-                                strlen(ctx->session.client),
+                                ctx->client,
+                                strlen(ctx->client),
                                 PGSQL_FORMAT_TEXT,
                                 // key
                                 req->path,
@@ -149,36 +149,8 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
     return rc;
 }
 
-void
-servo_request_content_types(struct http_request *req)
-{
-    char                    *accept = NULL;
-    char                    *content_type = NULL;
-    //char                    *accept_encoding = NULL;
-    struct servo_context    *ctx;
-
-    ctx = (struct servo_context*)req->hdlr_extra;
-    if (http_request_header(req, "Accept", &accept)) {
-        kore_log(LOG_DEBUG, "Accept: %s", accept);
-        if (strstr(accept, CONTENT_TYPE_JSON) != NULL)
-            ctx->out_content_type = SERVO_CONTENT_JSON;
-        if (strstr(accept, CONTENT_TYPE_BLOB) != NULL)
-            ctx->out_content_type = SERVO_CONTENT_BLOB;
-    }
-
-    if (http_request_header(req, "Content-Type", &content_type)) {
-        kore_log(LOG_DEBUG, "Content-Type: %s", content_type);
-        if (strstr(content_type, CONTENT_TYPE_JSON) != NULL)
-            ctx->in_content_type = SERVO_CONTENT_JSON;
-        if (strstr(content_type, CONTENT_TYPE_BLOB) != NULL)
-            ctx->in_content_type = SERVO_CONTENT_BLOB;
-    }
-
-    /* fixme: handle Accept-Encoding here */
-}
-
 int
-state_query_item(struct http_request *req)
+servo_state_query(struct http_request *req)
 {
     int                      rc, too_big;
     struct servo_context    *ctx;
@@ -199,7 +171,6 @@ state_query_item(struct http_request *req)
         return (rc == KORE_RESULT_OK ? HTTP_STATE_COMPLETE : HTTP_STATE_ERROR);
     }
 
-    servo_request_content_types(req);
     body = servo_request_data(req);
 
     /* Check size limitations */
@@ -265,18 +236,18 @@ state_query_item(struct http_request *req)
     }
 
     /* Wait for item request completition */
-    req->fsm_state = REQ_STATE_W_ITEM;
+    req->fsm_state = REQ_STATE_WAIT;
     return HTTP_STATE_CONTINUE;
 }
 
-int state_wait_item(struct http_request *req)
+int servo_state_wait(struct http_request *req)
 {
-    return servo_wait(req, REQ_STATE_R_ITEM,
+    return servo_wait(req, REQ_STATE_READ,
                            REQ_STATE_DONE,
                            REQ_STATE_ERROR);
 }
 
-int state_read_item(struct http_request *req)
+int servo_state_read(struct http_request *req)
 {
     int                      rows;               
     struct servo_context    *ctx;
@@ -349,9 +320,9 @@ int state_read_item(struct http_request *req)
     }
 
     /* Continue processing our query results. */
-    kore_pgsql_continue(req, &ctx->sql);
+    kore_pgsql_continue(&ctx->sql);
 
     /* Back to our DB waiting state. */
-    req->fsm_state = REQ_STATE_W_ITEM;
+    req->fsm_state = REQ_STATE_WAIT;
     return (HTTP_STATE_CONTINUE);
 }

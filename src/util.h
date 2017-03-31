@@ -19,23 +19,47 @@
 
 #include <jansson.h>
 
-#define CONTENT_TYPE_STRING		"text/plain; charset=UTF-8"
-#define CONTENT_TYPE_JSON		"application/json; charset=UTF-8"
-#define CONTENT_TYPE_BLOB		"multipart/form-data; charset=UTF-8"
-#define CONTENT_TYPE_HTML		"text/html; charset=UTF-8"
+#include "servo.h"
 
-#define SERVO_CONTENT_STRING	0
-#define SERVO_CONTENT_JSON		1
-#define SERVO_CONTENT_BLOB		2
+#define CONTENT_TYPE_STRING     "text/plain"
+#define CONTENT_TYPE_JSON       "application/json"
+#define CONTENT_TYPE_BLOB       "multipart/form-data"
+#define CONTENT_TYPE_HTML       "text/html"
 
-int					 servo_is_item_request(struct http_request *);
-struct kore_buf		*servo_request_data(struct http_request *);
-void				 servo_request_content_types(struct http_request *);
-void				 servo_response_json(struct http_request *,
-						const unsigned int, const json_t *);
-void				 servo_response_status(struct http_request *,
-						const unsigned int, const char *);
-void				 servo_handle_pg_error(struct http_request *);
+#define SERVO_CONTENT_STRING    0
+#define SERVO_CONTENT_HTML      1
+#define SERVO_CONTENT_JSON      2
+#define SERVO_CONTENT_BLOB      3
 
-char        *servo_random_string(char *, size_t);
+int                  servo_read_config(struct servo_config *);
+
+int                  servo_is_item_request(struct http_request *);
+struct kore_buf     *servo_request_data(struct http_request *);
+void                 servo_read_content_types(struct http_request *);
+
+void                 servo_response_json(struct http_request *,
+                                         const unsigned int,
+                                         const json_t *);
+void                 servo_response_status(struct http_request *,
+                                           const unsigned int,
+                                           const char *);
+
+void                 servo_handle_pg_error(struct http_request *);
+
+char                 *servo_item_to_string(struct servo_context *);
+char                 *servo_item_to_json(struct servo_context *);
+
+char                 *servo_random_string(char *, size_t);
+char                 *servo_format_date(time_t*);
+
+const char           *servo_state_text(int s);
+const char           *sql_state_text(int s);
+const char           *servo_request_state(struct http_request *);
+
+int                   servo_connect_db(struct http_request *, int, int, int);
+int                   servo_wait(struct http_request *, int, int, int);
+
+int                   servo_is_success(struct servo_context *);
+int                   servo_is_redirect(struct servo_context *);
+
 #endif //_SERVO_UTIL_H_
