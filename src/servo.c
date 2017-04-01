@@ -121,14 +121,13 @@ servo_init(int state)
 int
 servo_init_context(struct servo_context *ctx)
 {
-    unsigned char        *client_id;
+    uuid_t    client_uuid;
 
     /* Generate new client token and init fresh session */
-    client_id = NULL;
-    uuid_generate(client_id);
+    uuid_generate(client_uuid);
 
-    ctx->client = kore_malloc(CLIENT_MAX);
-    uuid_unparse(client_id, ctx->client);
+    ctx->client = kore_malloc(CLIENT_UUID_LEN);
+    uuid_unparse(client_uuid, ctx->client);
     kore_log(LOG_DEBUG, "new client without identifier, generated {%s}",
              ctx->client);
 
@@ -531,29 +530,4 @@ int state_done(struct http_request *req)
 
     servo_clear_context(ctx);
     return (HTTP_STATE_COMPLETE);
-}
-
-char *
-servo_item_to_string(struct servo_context *ctx)
-{
-    char    *b64;
-
-    switch(ctx->in_content_type) {
-        case SERVO_CONTENT_STRING:
-            return ctx->val_str;
-        case SERVO_CONTENT_JSON:
-            return json_dumps(ctx->val_json, JSON_INDENT(2));
-        case SERVO_CONTENT_BLOB:
-            kore_base64_encode(ctx->val_blob, ctx->val_sz, &b64);
-            return b64;
-    }
-
-    return NULL;
-}
-
-char *
-servo_item_to_json(struct servo_context *ctx)
-{
-    /* FIXME: apply json selectors here */
-    return servo_item_to_string(ctx);
 }

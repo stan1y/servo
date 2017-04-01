@@ -20,7 +20,7 @@
 
 /* Common */
 
-#define CLIENT_MAX              255
+#define CLIENT_UUID_LEN         37
 #define ITEM_KEY_MAX            255
 
 #define PGSQL_FORMAT_TEXT       0

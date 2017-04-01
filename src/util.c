@@ -194,12 +194,10 @@ servo_read_content_types(struct http_request *req)
 {
     char                    *accept = NULL;
     char                    *content_type = NULL;
-    //char                    *accept_encoding = NULL;
     struct servo_context    *ctx;
 
     ctx = (struct servo_context*)req->hdlr_extra;
-    if (http_request_header(req, "Accept", &accept)) {
-        kore_log(LOG_DEBUG, "Accept: %s", accept);
+    if (http_request_header(req, "accept", &accept)) {
         if (strstr(accept, CONTENT_TYPE_HTML) != NULL)
             ctx->out_content_type = SERVO_CONTENT_HTML;
         else if (strstr(accept, CONTENT_TYPE_JSON) != NULL)
@@ -210,8 +208,7 @@ servo_read_content_types(struct http_request *req)
             ctx->out_content_type = SERVO_CONTENT_STRING;
     }
 
-    if (http_request_header(req, "Content-Type", &content_type)) {
-        kore_log(LOG_DEBUG, "Content-Type: %s", content_type);
+    if (http_request_header(req, "content-type", &content_type)) {
         if (strstr(content_type, CONTENT_TYPE_HTML) != NULL)
             ctx->in_content_type = SERVO_CONTENT_HTML;
         else if (strstr(content_type, CONTENT_TYPE_JSON) != NULL)
@@ -257,4 +254,30 @@ servo_is_redirect(struct servo_context *ctx)
         return 1;
 
     return 0;
+}
+
+
+char *
+servo_item_to_string(struct servo_context *ctx)
+{
+    char    *b64;
+
+    switch(ctx->in_content_type) {
+        case SERVO_CONTENT_STRING:
+            return ctx->val_str;
+        case SERVO_CONTENT_JSON:
+            return json_dumps(ctx->val_json, JSON_INDENT(2));
+        case SERVO_CONTENT_BLOB:
+            kore_base64_encode(ctx->val_blob, ctx->val_sz, &b64);
+            return b64;
+    }
+
+    return NULL;
+}
+
+char *
+servo_item_to_json(struct servo_context *ctx)
+{
+    /* FIXME: apply json selectors here */
+    return servo_item_to_string(ctx);
 }
