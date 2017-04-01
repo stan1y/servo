@@ -95,11 +95,11 @@ struct servo_context {
     size_t               val_sz;
 };
 
-struct servo_context    *servo_create_context(struct http_request *);
 int                      servo_init_context(struct servo_context *);
 int                      servo_read_context_token(struct http_request *);
 void                     servo_write_context_token(struct http_request *);
-void                     servo_clear_context(struct servo_context *);
+void                     servo_delete_context(struct http_request *);
+
 int                      servo_put_context(struct servo_context *);
 int                      servo_purge_context(struct servo_context *);
 

@@ -196,7 +196,7 @@ servo_read_content_types(struct http_request *req)
     char                    *content_type = NULL;
     struct servo_context    *ctx;
 
-    ctx = (struct servo_context*)req->hdlr_extra;
+    ctx = (struct servo_context*)http_state_get(req);
     if (http_request_header(req, "accept", &accept)) {
         if (strstr(accept, CONTENT_TYPE_HTML) != NULL)
             ctx->out_content_type = SERVO_CONTENT_HTML;

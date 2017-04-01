@@ -10,7 +10,7 @@ int servo_render_stats(struct http_request *req)
     time_t                   last_read, last_write;
 
     rc = KORE_RESULT_OK;
-    ctx = (struct servo_context *)req->hdlr_extra;
+    ctx = (struct servo_context *)http_state_get(req);
     // FIXME: real stats here
     last_read = time(NULL);
     last_write = time(NULL);    
@@ -39,7 +39,7 @@ int servo_render_console(struct http_request *req)
     struct servo_context    *ctx;
 
     rc = KORE_RESULT_OK;
-    ctx = (struct servo_context *)req->hdlr_extra;
+    ctx = (struct servo_context *)http_state_get(req);
 
     buf = kore_buf_alloc(asset_len_console_html);
     kore_buf_append(buf, asset_console_html, asset_len_console_html);

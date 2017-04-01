@@ -37,8 +37,13 @@ servo_request_state(struct http_request * req)
 }
 
 void
-servo_clear_context(struct servo_context *ctx)
+servo_delete_context(struct http_request *req)
 {
+    struct servo_context    *ctx;
+
+    ctx = http_state_get(req);
+    kore_pgsql_cleanup(&ctx->sql);
+
     if (ctx->err != NULL)
         kore_free(ctx->err);
     if (ctx->val_str != NULL)
@@ -49,6 +54,9 @@ servo_clear_context(struct servo_context *ctx)
         kore_free(ctx->val_blob);
     if (ctx->token)
         jwt_free(ctx->token);
+    
+    http_state_cleanup(req);
+    kore_log(LOG_NOTICE, "request completed");
 }
 
 
@@ -158,7 +166,7 @@ servo_write_context_token(struct http_request *req)
     char                    *token;
     struct kore_buf         *token_hdr;
 
-    ctx = req->hdlr_extra;
+    ctx = http_state_get(req);
     token = jwt_encode_str(ctx->token);
     token_hdr = kore_buf_alloc(HTTP_HEADER_MAX_LEN);
     kore_buf_append(token_hdr, AUTH_TYPE_PREFIX, strlen(AUTH_TYPE_PREFIX));
@@ -167,6 +175,7 @@ servo_write_context_token(struct http_request *req)
 
     http_response_header(req, AUTH_HEADER,
                          kore_buf_stringify(token_hdr, NULL));
+    kore_buf_free(token_hdr);
 }
 
 int
@@ -178,7 +187,7 @@ servo_read_context_token(struct http_request *req)
                             *hdr_parts[3];
     const char              *client_id;
 
-    ctx = req->hdlr_extra;
+    ctx = http_state_get(req);
     if (ctx->token != NULL || ctx->client != NULL) {
         kore_log(LOG_ERR, "%s: trying to read non-empty context",
                           __FUNCTION__);
@@ -229,98 +238,24 @@ servo_read_context_token(struct http_request *req)
     return (KORE_RESULT_OK);
 }
 
-/**
- * Servo Session API entry point
- */
 int 
 servo_start(struct http_request *req)
 {
-    char                    *origin = NULL;
-    char                     saddr[INET6_ADDRSTRLEN];
-    struct servo_context    *ctx;
-    int                      rc;
-
     if (!http_state_exists(req)) {
-        ctx = http_state_create(req, sizeof(struct servo_context));
+        http_state_create(req, sizeof(struct servo_context));
     }
-    else {
-        // finish request now with fatal error
-        kore_log(LOG_ERR, "%s: context already present!",
-                          __FUNCTION__);
-        servo_response_status(500, http_status_text(500));
-        return (KORE_RESULT_OK);
-    }
-
-    /* Filter by Origin header */
-    if (CONFIG->allow_origin != NULL) {
-        if (!http_request_header(req, "Origin", &origin) && !CONFIG->public_mode) {
-            kore_log(LOG_NOTICE, "%s: disallow access - no 'Origin' header sent",
-                __FUNCTION__);
-            servo_response_status(req, 403, "'Origin' header is not found");
-            return (KORE_RESULT_OK);
-        }
-        if (strcmp(origin, CONFIG->allow_origin) != 0) {
-            kore_log(LOG_NOTICE, "%s: disallow access - 'Origin' header mismatch %s != %s",
-                __FUNCTION__,
-                origin, CONFIG->allow_origin);
-            servo_response_status(req, 403, "Origin Access Denied");
-            return (KORE_RESULT_OK);
-        }
-    }
-
-    /* Filter by client ip address */
-    if (CONFIG->allow_ipaddr != NULL) {
-        memset(saddr, 0, sizeof(saddr));
-        if (req->owner->addrtype == AF_INET) {
-            inet_ntop(AF_INET, &req->owner->addr.ipv4.sin_addr, saddr, sizeof(saddr));
-        }
-        if (req->owner->addrtype == AF_INET6) {
-            inet_ntop(AF_INET6, &req->owner->addr.ipv6.sin6_addr, saddr, sizeof(saddr));
-        }
-
-        if (strcmp(saddr, CONFIG->allow_ipaddr) != 0) {
-            kore_log(LOG_NOTICE, "%s: disallow access - Client IP mismatch %s != %s",
-                __FUNCTION__, saddr, CONFIG->allow_ipaddr);
-            servo_response_status(req, 403, "Client Access Denied");
-            return (KORE_RESULT_OK);
-        }
-    }
-
-    // read header and parse json web token
-    if (!servo_read_context_token(req)) {
-        if (!servo_init_context(ctx)) {
-            // finish request with 500 error 
-            servo_clear_context(ctx);
-            servo_response_status(req, 500, http_status_text(500));
-            return (KORE_RESULT_OK);
-        }
-    }
-    
-    servo_write_context_token(req);
-    servo_read_content_types(req);
-
-    // render console html or stats for client bootstrap
-    if (!servo_is_item_request(req)) {
-        if (CONFIG->public_mode && ctx->out_content_type == SERVO_CONTENT_HTML)
-            rc = servo_render_console(req);
-        else
-            rc = servo_render_stats(req);
-
-        servo_clear_context(ctx);
-        return rc;
-    }
-
     return (http_state_run(servo_session_states, servo_session_states_size, req));
 }
 
 int
 servo_connect_db(struct http_request *req, int retry_step, int success_step, int error_step)
 {
-    struct servo_context    *ctx = req->hdlr_extra;
+    struct servo_context    *ctx = http_state_get(req);
     
     kore_pgsql_cleanup(&ctx->sql);
     kore_pgsql_init(&ctx->sql);
     kore_pgsql_bind_request(&ctx->sql, req);
+
     if (!kore_pgsql_setup(&ctx->sql, DBNAME, KORE_PGSQL_ASYNC)) {
 
         /* If the state was still INIT, we'll try again later. */
@@ -351,7 +286,7 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
 void 
 servo_handle_pg_error(struct http_request *req)
 {
-    struct servo_context *ctx = req->hdlr_extra;
+    struct servo_context *ctx = http_state_get(req);
 
     // default failure code
     ctx->status = 500;
@@ -368,7 +303,7 @@ servo_handle_pg_error(struct http_request *req)
 int
 servo_wait(struct http_request *req, int read_step, int complete_step, int error_step)
 {
-    struct servo_context *ctx = req->hdlr_extra;
+    struct servo_context *ctx = http_state_get(req);
 
     switch (ctx->sql.state) {
     case KORE_PGSQL_STATE_WAIT:
@@ -406,10 +341,8 @@ servo_wait(struct http_request *req, int read_step, int complete_step, int error
 /* An error occurred. */
 int state_error(struct http_request *req)
 {
-    struct servo_context    *ctx = req->hdlr_extra;
+    struct servo_context    *ctx = http_state_get(req);
     const char              *msg;
-
-    kore_pgsql_cleanup(&ctx->sql);
 
     /* Handle redirect */
     if (servo_is_redirect(ctx)) {
@@ -421,7 +354,7 @@ int state_error(struct http_request *req)
             ctx->client);
 
         http_response(req, ctx->status, msg, sizeof(msg));
-        servo_clear_context(ctx);
+        servo_delete_context(req);
         return (HTTP_STATE_COMPLETE);
     }
 
@@ -438,17 +371,15 @@ int state_error(struct http_request *req)
     servo_response_status(req, ctx->status, 
         ctx->err != NULL ? ctx->err : http_status_text(ctx->status));
 
-    servo_clear_context(ctx);
+    servo_delete_context(req);
     return (HTTP_STATE_COMPLETE);
 }
 
 /* Request was completed successfully. */
 int state_done(struct http_request *req)
 {
-    struct servo_context    *ctx = req->hdlr_extra;
-    const char                    *output;
-
-    kore_pgsql_cleanup(&ctx->sql);
+    struct servo_context    *ctx = http_state_get(req);
+    const char              *output;
 
     if (req->method == HTTP_METHOD_POST ||
         req->method == HTTP_METHOD_PUT) 
@@ -526,6 +457,6 @@ int state_done(struct http_request *req)
         http_status_text(ctx->status),
         ctx->client);
 
-    servo_clear_context(ctx);
+    servo_delete_context(req);
     return (HTTP_STATE_COMPLETE);
 }
