@@ -38,7 +38,10 @@ static char* lskip(const char* s)
 {
     while (*s && isspace((unsigned char)(*s)))
         s++;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-qual"
     return (char*)s;
+#pragma clang diagnostic pop
 }
 
 /* Return pointer to first char (of chars) or inline comment in given string,
@@ -58,7 +61,10 @@ static char* find_chars_or_comment(const char* s, const char* chars)
         s++;
     }
 #endif
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-qual"
     return (char*)s;
+#pragma clang diagnostic pop
 }
 
 /* Version of strncpy that ensures dest (size bytes) is null-terminated. */
