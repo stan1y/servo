@@ -7,12 +7,12 @@ struct servo_config *CONFIG;
 struct http_state   servo_session_states[] = {
 
     { "REQ_STATE_INIT",       servo_state_init  },
-    { "REQ_STATE_QUERY",	  servo_state_query },
-    { "REQ_STATE_WAIT",	      servo_state_wait  },
+    { "REQ_STATE_QUERY",      servo_state_query },
+    { "REQ_STATE_WAIT",       servo_state_wait  },
     { "REQ_STATE_READ",       servo_state_read  },
 
     { "REQ_STATE_ERROR",      state_error },
-    { "REQ_STATE_DONE",		  state_done  },
+    { "REQ_STATE_DONE",       state_done  },
 };
 
 #define servo_session_states_size (sizeof(servo_session_states) \
@@ -34,28 +34,6 @@ const char *
 servo_request_state(struct http_request * req)
 {
     return servo_state_text(req->fsm_state);
-}
-
-struct servo_context *
-servo_create_context(struct http_request *req)
-{
-    struct servo_context *ctx;
-
-    ctx = kore_malloc(sizeof(struct servo_context));
-    ctx->client = NULL;
-    ctx->status = 200;
-    ctx->err = NULL;
-    ctx->token = NULL;
-    ctx->val_sz = 0;
-    ctx->val_str = NULL;
-    ctx->val_json = NULL;
-    ctx->val_blob = NULL;
-
-    /* read and write strings by default */
-    ctx->in_content_type = SERVO_CONTENT_STRING;
-    ctx->out_content_type = SERVO_CONTENT_STRING;
-
-    return ctx;
 }
 
 void
@@ -122,6 +100,20 @@ int
 servo_init_context(struct servo_context *ctx)
 {
     uuid_t    client_uuid;
+
+    // set empty defaults
+    ctx->client = NULL;
+    ctx->status = 200;
+    ctx->err = NULL;
+    ctx->token = NULL;
+    ctx->val_sz = 0;
+    ctx->val_str = NULL;
+    ctx->val_json = NULL;
+    ctx->val_blob = NULL;
+
+    /* read and write strings by default */
+    ctx->in_content_type = SERVO_CONTENT_STRING;
+    ctx->out_content_type = SERVO_CONTENT_STRING;
 
     /* Generate new client token and init fresh session */
     uuid_generate(client_uuid);
@@ -248,10 +240,16 @@ servo_start(struct http_request *req)
     struct servo_context    *ctx;
     int                      rc;
 
-    if (req->hdlr_extra == NULL) {
-       req->hdlr_extra = servo_create_context(req);
+    if (!http_state_exists(req)) {
+        ctx = http_state_create(req, sizeof(struct servo_context));
     }
-    ctx = req->hdlr_extra;
+    else {
+        // finish request now with fatal error
+        kore_log(LOG_ERR, "%s: context already present!",
+                          __FUNCTION__);
+        servo_response_status(500, http_status_text(500));
+        return (KORE_RESULT_OK);
+    }
 
     /* Filter by Origin header */
     if (CONFIG->allow_origin != NULL) {
