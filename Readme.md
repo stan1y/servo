@@ -2,45 +2,40 @@
 
 ## Servo is a minimalist backend session engine and storage.
 
-[Servo](http://www.endlessinsomnia.com/projects/servo) is a backend session storage engine. It allows you easily store structured and unstructured data in a key/value remote on-demand storage with enforced expiration. Servo is minimalistic so there is no authentication however there is an isolation between sessions. Servo is no configuration, RESTfull, a full CRUD scrap storage for web application and (mainly) javascript in generated static web sites.
+[Servo](http://www.endlessinsomnia.com/projects/servo) is a backend session storage engine. It allows you easily store structured and unstructured data in a key/value remote on-demand storage with enforced expiration. Servo is minimalistic so there is no authentication (by default) however there is an isolation between sessions. Servo is no configuration, RESTfull, a full CRUD scrap storage for web application and (mainly) javascript in generated static web sites.
 
 ### Servo features
 
 - No client configuration, just AJAX/REST requests on a fixed path
 - Auto-expiration of stored items in an isolated anonymous sessions
 - Understands and speaks in `text/plain`, `application/base64`, `application/json` and `multipart/form-data`
+- Json Web Tokens RFC 7519 client-side state
 
 Think of Servo as a shopping cart persistent across devices or persons;
 Or as poll storage for your static blog post; 
 Or as temporary storage to upload user's picture to manipulate it on the client side (javascript).
 
-## Usage
+There is a javascript client library for easy use, however plan REST API lets
+
+### Usage
 
 Clients use Servo API to establish a session and store data in it. The service is not designed to be publicly visible to external clients and it is advised to use request throttling in a dedicated proxy service. For example [nginx's ngx_http_limit_req_module](http://nginx.org/en/docs/http/ngx_http_limit_req_module.html) is a very good choice for this job.
 
-### Build & Install
+
+### Dependencies 
+
+* [Kore Framework](https://kore.io)
+* [libjansson](http://www.digip.org/jansson/)
+* [libjwt](https://github.com/benmcollins/libjwt)
 
 
-#### Install Dependencies 
-
+#### Install 
 
 * __CentOS 7:__ `sudo yum install postgresql-sever postgresql-devel libuuid-devel`
 * __Mac OS X:__ `brew install postgresql ossp-uuid`
 
 
-Servo is built on top of the [Kore framework](https://kore.io/), so you need to install it first.
-
-     $ cd kore
-     $ export TASKS=1
-     $ export PGSQL=1
-     $ make
- 		building ...
-     $ sudo make install
-
-This will build Kore with features used by Servo. Next build Servo with `kore` tool. Make sure it is installed correctly:
-
-     $ kore -v
-
+Servo runs on [Kore framework](https://kore.io/), so you need to install it first.
 Select build flavor corresponding to your platform, see available flavors with `kore flavor`
 
      $ kore flavor linux-dev
@@ -53,7 +48,7 @@ This command will build a `servo.so` module which is an application for Kore. Ne
 
 Execute
 
-     $ kore run
+     $ kodev run
 
 To run locally, or run
 
@@ -69,13 +64,12 @@ To configure a fresh installation of Servo run the following tools:
 
 This will drop and create a new fresh database.
 
-
 ### Query Data
 
 To ask Servo for saved item, clients need to perform `GET` request to a one of following paths. Session index request can be used to verify session availability in case caller in black-listed or blocked otherwise, but in general caller need to be prepared to handle error status code from `GET` interface.
 
-- `GET /session/` Session index. Returns statistics or debug console in [public mode](#Public Mode).
-- `GET /session/{key}` - Get item data for specified key.
+- `GET /` - Session index. Returns statistics or debug console in [public mode](#Public Mode).
+- `GET /foo` - Get item data for specified key `/foo`.
 
 Item data is formatted as specified by `Accept` header in the request. If no item found with such key, a 404 error is returned. So client may upload binary files as `multipart/form-data` and get it back as `application/base64` for later use in data urls.
 
@@ -87,11 +81,10 @@ TBD
 
 To store data in Servo, clients need to perform either `POST` or `PUT` requests with item {key} in request path.
 
-- `POST /session/{key}` - Create a new item with specified key. 
-- `PUT  /session/{key}` - Alter existing item with specified key, if no such item returns error status 404.
+- `POST /foo` - Create a new item with key `/foo`. If there is an item with key `/foo` error 409 Conflict is returned.
+- `PUT  /foo` - Alter existing item with key `/foo`. If no such item returns error 404 Not Found is retured.
 
-Internally Servo understands data as 3 possible types: JSON, TEXT and BLOB and inspects `Content-Type` header to pick a data parser
-for request data. 
+Internally Servo understands data as 3 possible types: JSON, TEXT and BLOB and inspects `Content-Type` header to pick a data parser for request data. Broken JSON or Base64 will lead to error 400.
 The following values are recognized by Servo:
 
 - `application/json` Servo reads data from request `body` and stores it as JSON type. 
@@ -107,11 +100,11 @@ Requests may return with error status 403 if sent data was not well formed or to
 Servo automatically expires session and purges all data associated with a session during removal. At the same time clients
 may want to remove saved data for cleanup/reset purposes.
 
-- `DELETE /session/{key}` - Create a new item with specified key. 
+- `DELETE /foo` - Create a new item with key `/foo`. 
 
 ## Public Mode
 
-Servo is serving a debug console to query data using browser itself.
+Servo is serving a debug console to query data using browser itself. This is an example for client lib usage as well.
 
 ## Releases
 
