@@ -1,0 +1,191 @@
+<!DOCTYPE>
+<html>
+	<head>
+		<title>Servo</title>
+		<meta charset="utf-9" />
+		<meta name="description" content="Servo Console" />
+
+		<!-- jQuery -->
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+		<!-- Bootstrap -->
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+
+		<script src="/console.js" crossorigin="anonymous"></script>
+	</head>
+
+	<body>
+		<div class="container">
+			<form class="form-horizontal">
+				<fieldset>
+					<legend>Servo Debug Console</legend>
+
+					<div id="alert-warn" class="alert alert-warning" style="display: none;">
+					 	<strong>Warning</strong>. Please correct your input.
+					</div>
+					<div id="alert-error" class="alert alert-danger" style="display: none;">
+		  				<span class="details"></span>. <span class="message"></span>
+					</div>
+
+					<div id="alert-info" class="alert alert-info" style="display: none;">
+		  				<span class="details"></span>. Completed successfully.
+					</div>
+					
+					<div class="form-group">
+						<label class="col-md-3 control-label">
+							App ID and Key 
+						</label>
+						<div class="col-md-3">
+							<input id="client-id"
+								   type="text"
+								   placeholder="my-app" 
+								   class="form-control input-md"
+								   readonly>
+							<span class="help-block">
+								You client identifier string, can be anything.
+							</span>  
+						</div>
+						<div class="col-md-3">
+							<input id="auth-key"
+								   type="text"
+								   placeholder="secret" 
+								   class="form-control input-md"
+								   readonly>
+							<span class="help-block">
+								Your key for signing the authentication token.
+							</span>  
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-md-3 control-label" for="enable-auth">
+							Authentication
+						</label>  
+						<div class="col-md-3
+									checkbox">
+						  	<label><input type="checkbox" 
+						  				  id="enable-auth"
+						  				  name="enable-auth">Enable Authenicated Mode</label>
+						  	<span class="help-block">
+								Servo supports anonymous unsigned tokens and client signed tokens
+								with shared per client unique key. This key is used to sign tokens
+								in order to be accepted by Servo.
+							</span>  
+						</div>
+						<div class="col-md-3">
+							<select id="auth-alg" 
+								name="auth-alg"  
+								class="form-control input-md"
+								disabled>
+								<option value="HS256">HS256</option>
+								<option value="HS384">HS384</option>
+								<option value="HS512">HS512</option>
+							</select>
+							<span class="help-block">
+								Signature algorithm.
+							</span>  
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-md-3 control-label" for="item-key">
+							Key
+						</label>  
+						<div class="col-md-6">
+							<input id="item-key" 
+								name="item-key" 
+								type="text" 
+								placeholder="/foo/bar" 
+								class="form-control input-md">
+							<span class="help-block">
+								Unique URL-encoded item path.
+							</span>  
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-md-3 control-label">
+							Method and Type
+						</label>
+						<div class="col-md-3">
+							<label class="radio-inline">
+						    	<input type="radio" 
+						    		   id="method"
+						    		   name="method"
+						    		   value="GET"
+						    		   checked>GET
+						    </label>
+						    <label class="radio-inline">
+						    	<input type="radio" 
+						    		   id="method"
+						    		   name="method"
+						    		   value="POST">POST
+						    </label>
+						    <br/>
+						    <label class="radio-inline">
+						    	<input type="radio" 
+						    		   id="method"
+						    		   name="method"
+						    		   value="PUT">PUT
+						    </label>
+						    <label class="radio-inline">
+						    	<input type="radio" 
+						    		   id="method"
+						    		   name="method"
+						    		   value="DELETE">DELETE
+						    </label>
+						</div>
+						<div class="col-md-3">
+							<select id="data-type" 
+								name="data-type"  
+								class="form-control input-md">
+								<option value="text">Plain text</option>
+								<option value="json">JSON</option>
+								<option value="binary">Binary</option>
+							</select>
+							<span class="help-block">
+								Item content type.
+							</span>  
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="col-md-3 control-label">
+							Item Content 
+						</label>  
+						<div class="col-md-3">
+							<textarea id="body" 
+								name="body"
+								rows=6
+								class="form-control"
+								readonly></textarea>
+							<span class="help-block">
+								Payload to be sent to Servo
+							</span>  
+						</div>
+						<div class="col-md-3">
+							<textarea id="response" 
+								name="response"
+								rows=6
+								class="form-control"
+								readonly></textarea>
+							<span class="help-block">
+								Contents of the response from servo
+							</span>  
+						</div>
+						<div class="col-md-1">
+							<button type="button"
+								id="send"
+								class="btn btn-s btn-primary"">Send</button>
+							<br/>
+							<br/>
+							<button type="button"
+								id="reset"
+								class="btn btn-s btn-warning">Reset</button>
+						<div>
+					</div>
+
+				</fieldset>
+			</form>
+		</div>
+	</body>
+
+</html>

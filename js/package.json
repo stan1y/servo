@@ -1,0 +1,45 @@
+{
+  "name": "servo",
+  "description": "Javascription client library for Servo API.",
+  "version": "0.0.1",
+  "homepage": "https://github.com/stan1y/servo",
+  "author": {
+    "name": "Stanislav Yudin",
+    "email": "stan@endlessinsomnia.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/stan1y/servo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stan1y/servo/issues"
+  },
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://github.com/stan1y/servo/blob/master/LICENSE-MIT"
+    }
+  ],
+  "main": "lib/servo",
+  "engines": {
+    "node": ">= 0.10.0"
+  },
+  "scripts": {
+    "test": "grunt nodeunit"
+  },
+  "dependencies": {
+    "browser-request": "0.3.3",
+    "express": "^4.15.2",
+    "xmlhttprequest": "1.8.0"
+  },
+  "devDependencies": {
+    "grunt-contrib-concat": "~0.3.0",
+    "grunt-contrib-jshint": "~0.6.0",
+    "grunt-contrib-nodeunit": "~0.2.0",
+    "grunt-contrib-watch": "~0.4.0",
+    "grunt": "~0.4.5",
+    "grunt-browserify": "5.0.0",
+    "browserify": "~13.0.0"
+  },
+  "keywords": []
+}
