@@ -46,6 +46,8 @@ servo_delete_context(struct http_request *req)
 
     if (ctx->err != NULL)
         kore_free(ctx->err);
+    if (ctx->client != NULL)
+        kore_free(ctx->client);
     if (ctx->val_str != NULL)
         kore_free(ctx->val_str);
     if (ctx->val_json != NULL)
@@ -56,7 +58,6 @@ servo_delete_context(struct http_request *req)
         jwt_free(ctx->token);
     
     http_state_cleanup(req);
-    kore_log(LOG_NOTICE, "request completed");
 }
 
 
@@ -76,13 +77,16 @@ servo_init(int state)
     CONFIG->allow_origin = NULL;
     CONFIG->allow_ipaddr = NULL;
     CONFIG->jwt_key = NULL;
+    CONFIG->jwt_key_len = 0;
+    CONFIG->jwt_alg = JWT_ALG_NONE;
 
     if (!servo_read_config(CONFIG)) {
         kore_log(LOG_ERR, "%s: servo is not configured", __FUNCTION__);
         return (KORE_RESULT_ERROR);
     }
 
-    if (CONFIG->jwt_key == NULL) {
+    if (CONFIG->jwt_key == NULL && CONFIG->jwt_alg != JWT_ALG_NONE) {
+        kore_log(LOG_NOTICE, "no key given for auth, using random");
         CONFIG->jwt_key_len = 16;
         CONFIG->jwt_key = kore_malloc(CONFIG->jwt_key_len);
         CONFIG->jwt_key = servo_random_string(CONFIG->jwt_key,
@@ -90,7 +94,12 @@ servo_init(int state)
     }
 
     kore_log(LOG_NOTICE, "started worker pid: %d", (int)getpid());
-    kore_log(LOG_NOTICE, "  web token key: %s", CONFIG->jwt_key);
+    if (CONFIG->jwt_alg != JWT_ALG_NONE) {
+        kore_log(LOG_NOTICE, "  auth key: %s", CONFIG->jwt_key);
+    }
+    else
+        kore_log(LOG_NOTICE, "  auth key: disabled");
+
     kore_log(LOG_NOTICE, "  public mode: %s", CONFIG->public_mode != 0 ? "yes" : "no");
     kore_log(LOG_NOTICE, "  session ttl: %zu seconds", CONFIG->session_ttl);
     kore_log(LOG_NOTICE, "  max sessions: %zu", CONFIG->max_sessions);
@@ -138,15 +147,17 @@ servo_init_context(struct servo_context *ctx)
         return (KORE_RESULT_ERROR);
     }
 
-    if (jwt_set_alg(ctx->token, JWT_ALG_HS256,
-                     (const unsigned char *)CONFIG->jwt_key,
-                     CONFIG->jwt_key_len) != 0) {
-        kore_log(LOG_ERR, "%s: failed set token alg",
-                 __FUNCTION__);
-        jwt_free(ctx->token);
-        ctx->token = NULL;
-        return (KORE_RESULT_ERROR);
-    }
+    if (CONFIG->jwt_alg != JWT_ALG_NONE)
+        if (jwt_set_alg(ctx->token, 
+                        CONFIG->jwt_alg,
+                        (const unsigned char *)CONFIG->jwt_key,
+                         CONFIG->jwt_key_len) != 0) {
+            kore_log(LOG_ERR, "%s: failed set token alg",
+                     __FUNCTION__);
+            jwt_free(ctx->token);
+            ctx->token = NULL;
+            return (KORE_RESULT_ERROR);
+        }
 
     if (jwt_add_grant(ctx->token, "id", ctx->client) != 0) {
         kore_log(LOG_ERR, "%s: failed add grant to jwt",

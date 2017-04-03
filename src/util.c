@@ -33,9 +33,47 @@ static int servo_read_config_handler(void* user, const char* section, const char
         cfg->allow_origin = kore_strdup(value);
     } else if (MATCH("filter", "ip_address")) {
         cfg->allow_ipaddr = kore_strdup(value);
-    } else if (MATCH("session", "jwt_key")) {
+    } else if (MATCH("auth", "key")) {
         cfg->jwt_key = kore_strdup(value);
-        cfg->jwt_key_len = strlen(cfg->jwt_key);
+        cfg->jwt_key_len = strlen(value);
+    } else if (MATCH("auth", "alg")) {
+        if (strcmp(value, "HS256")) {
+            cfg->jwt_alg = JWT_ALG_HS256;            
+        }
+        else if (strcmp(value, "HS384")) {
+            cfg->jwt_alg = JWT_ALG_HS384;            
+        }
+        else if (strcmp(value, "HS512")) {
+            cfg->jwt_alg = JWT_ALG_HS512;            
+        }
+        else if (strcmp(value, "RS256")) {
+            cfg->jwt_alg = JWT_ALG_RS256;            
+        }
+        else if (strcmp(value, "RS384")) {
+            cfg->jwt_alg = JWT_ALG_RS384;            
+        }
+        else if (strcmp(value, "RS512")) {
+            cfg->jwt_alg = JWT_ALG_RS512;            
+        }
+        else if (strcmp(value, "ES256")) {
+            cfg->jwt_alg = JWT_ALG_ES256;            
+        }
+        else if (strcmp(value, "ES384")) {
+            cfg->jwt_alg = JWT_ALG_ES384;            
+        }
+        else if (strcmp(value, "ES512")) {
+            cfg->jwt_alg = JWT_ALG_ES512;            
+        }
+        else if (strcmp(value, "TERM")) {
+            cfg->jwt_alg = JWT_ALG_TERM;            
+        }
+        else if (strcmp(value, "none")) {
+            cfg->jwt_alg = JWT_ALG_NONE;           
+        }
+        else {
+            kore_log(LOG_ERR, "unknown auth algorithm: %s", 
+                              value);
+        }
     } else {
         kore_log(LOG_ERR, "unknown option \"%s.%s\"",
             section, name);

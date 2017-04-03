@@ -57,6 +57,7 @@ struct servo_config {
     size_t       max_sessions;
     char        *jwt_key;
     size_t       jwt_key_len;
+    jwt_alg_t    jwt_alg;
 
     /* values size limits */
     size_t       string_size;

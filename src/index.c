@@ -15,9 +15,9 @@ int servo_render_stats(struct http_request *req)
     last_read = time(NULL);
     last_write = time(NULL);    
     stats = json_pack("{s:s s:s s:s s:i}",
-		      "client", ctx->client,
-		      "last_read", servo_format_date(&last_read),
-              "last_write", servo_format_date(&last_write),
+		      "client",      ctx->client,
+		      "last_read",   servo_format_date(&last_read),
+              "last_write",  servo_format_date(&last_write),
               "session_ttl", CONFIG->session_ttl);
     servo_response_json(req, 200, stats);
     json_decref(stats);
