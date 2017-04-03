@@ -1,6 +1,5 @@
 # Servo Makefile
 
-KORE_SRC=lib/kore
 KORE=$(shell which kodev)
 SERVO=servo.so
 S_SRC=	$(wildcard src/*.c)
