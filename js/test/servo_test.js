@@ -32,20 +32,27 @@ exports['servo_tests'] = {
     var servoUrl = 'https://localhost:8080',
         appId = 'the-app-id',
         appKey = 'SuPeR$eCrEt',
-        authMode = 'HS256',
+        authMode = 'HS512',
         s = null;
     
     // anon ctor
-    s = servo.connect(servoUrl);
+    s = servo.Servo(servoUrl);
     test.equal(s.baseurl, servoUrl, 'baseurl should match.');
     test.equal(s.algmode, 'none', 'should be anonymous.');
 
     // auth ctor
-    s = servo.connect(servoUrl).alg(authMode).auth(appId, appKey);
+    s = servo.Servo(servoUrl).auth(appId, appKey);
     test.equal(s.baseurl, servoUrl, 'baseurl should match.');
     test.equal(s.appid, appId, 'appid should match.');
     test.equal(s.appkey, appKey, 'appkey should match.');
-    test.equal(s.algmode, authMode, 'algmode should match.');
+    test.equal(s.algmode, 'HS256', 'default algmode should match.');
+
+    // custom algmode ctor
+    s = servo.Servo(servoUrl).auth(appId, appKey, authMode);
+    test.equal(s.baseurl, servoUrl, 'baseurl should match.');
+    test.equal(s.appid, appId, 'appid should match.');
+    test.equal(s.appkey, appKey, 'appkey should match.');
+    test.equal(s.algmode, authMode, 'default algmode should match.');
 
     test.done();
   }

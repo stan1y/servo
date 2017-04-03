@@ -38,35 +38,39 @@ function isBrowser() {
     return this;
   };
 
-  ServoClient.prototype.auth = function(appid, appkey) {
+  ServoClient.prototype.auth = function(appid, appkey, algmode) {
     this.appid = appid;
     this.appkey = appkey;
+    this.algmode = algmode || 'HS256';
     return this;
   };
 
-  ServoClient.prototype.alg = function(algmode) {
-    this.algmode = algmode;
-    return this;
+  ServoClient.prototype.get = function(key, type) {
+    var headers = {},
+        uri = this.baseurl + "/" + encodeURIComponent(key);
+
+    if (this.appid && this.appkey) {
+      headers['Authentication'] = this.buildAuthHeader();
+    }
+
+    request({
+      method: 'GET',
+      uri: uri,
+      headers: headers
+    });
+
   };
 
-  ServoClient.prototype.get = function(itemkey) {
-    return null;
+  ServoClient.prototype.post = function(key, item) {
   };
 
-  ServoClient.prototype.post = function(itemkey, item) {
-    /* item can be a string or an object */
-    return null;
+  ServoClient.prototype.put = function(key, item) {
   };
 
-  ServoClient.prototype.put = function(itemkey, item) {
-    return null;
+  ServoClient.prototype.delete = function(key) {
   };
 
-  ServoClient.prototype.delete = function(itemkey) {
-    return null;
-  };
-
-  exports.connect = function(baseurl) {
+  exports.Servo = function(baseurl) {
     return new ServoClient(baseurl);
   };
 
