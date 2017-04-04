@@ -16,7 +16,8 @@ $(document).ready(function() {
 	var sendBtn = $("#send"),
 		resetBtn = $("#reset"),
 		methodSel = $("input#method"),
-		body = $("textarea#body");
+		body = $("textarea#body"),
+		s = servo.Servo();
 
 	var reset = function() {
 		$("#alert-warn").hide();
@@ -27,64 +28,52 @@ $(document).ready(function() {
 		$("div.form-group").removeClass("has-error");
 	};
 
-	var onServoError = function(xhr, type, ex) {
-		console.log("Error received: " + xhr.responseText);
-		var err = JSON.parse(xhr.responseText);
-
-		$("#alert-error").children(".details").html(
-			"<strong>" + xhr.status + ": " + xhr.statusText + "</strong>");
-		if (err["message"] != xhr.statusText)
-			$("#alert-error").children(".message").html(err["message"]);
-		$("#alert-error").show();
-		$("#response").val(xhr.responseText);
-	};
-
-	var onServoSuccess = function(data, status, resp) {
-		var isStatusResponse = false;
-		if (typeof data == "object") {
-			if ("code" in data && "message" in data) {
-				// this is standard API status response
-				isApiResponse = true;
+	var send = function(servoUrl, clientId, method, itemKey, dataType, data) {
+		var dataTypesMap = { 
+			text: 'text/plain; charset=UTF-8',
+			json: 'application/json; charset=UTF-8',
+			binary: 'multipart/form-data; charset=UTF-8' 
+		};
+		
+		s.setUrl(servoUrl);
+		s.do(method, itemKey, {
+			type: dataType,
+			body: data,
+			success: function(body, xhr) {
 				$("#alert-info").children(".details").html(
-					data["code"] + ": " + data["message"]);
+					"<strong>" + xhr.status + ": " + xhr.statusText + "</strong>");
+				$("#alert-info").show();
+				$("#response").val(JSON.stringify(body));
+			},
+			error: function(err, xhr) {
+				$("#alert-error").children(".details").html(
+					"<strong>" + xhr.status + ": " + xhr.statusText + "</strong>");
+				if (err.message && err.message != xhr.statusText)
+					$("#alert-error").children(".message").html(err.message);
+				
+				$("#alert-error").show();
+				$("#response").val(JSON.stringify(err));
 			}
-			data =  JSON.stringify(data)
-		}
-
-		if (!isStatusResponse && data && data.length) {
-			console.log("received bytes length=" + data.length);
-			$("#response").val(data);
-		}
-		$("#alert-info").children(".details").html(
-			"<strong>" + resp.status + ": " + resp.statusText + "</strong>");
-		$("#alert-info").show();
-	};
-
-	var send = function(clientId, method, itemKey, dataType, data) {
-		var servoUrl = "https://" + window.location.host
-		             + "/" + itemKey,
-		    dataTypesMap = { 
-				text: 'text/plain; charset=UTF-8',
-				json: 'application/json; charset=UTF-8',
-				binary: 'multipart/form-data; charset=UTF-8' 
-			};
-
-		console.log("servoUrl=" + servoUrl);
-		$.ajax(servoUrl, {
-			method: method,
-			data: data,
-			dataType: dataType,
-			accepts: dataTypesMap,
-			contentType: dataTypesMap[dataType],
-			error: onServoError,
-			success: onServoSuccess,
-			processData: false
 		});
+
+		// $.ajax(servoUrl, {
+		//  method: method,
+		//  data: data,
+		//  dataType: dataType,
+		//  accepts: dataTypesMap,
+		//  contentType: dataTypesMap[dataType],
+		//  error: onServoError,
+		//  success: onServoSuccess,
+		//  processData: false
+		// });
 	};
 
 	$(sendBtn).on("click", function() {
 
-		var clientId = $("#client-id").val(),
+		var auth = $("enable-auth").is(":checked"),
+			servoUrl = $("#servo-url").val(),
+			clientId = $("#client-id").val(),
+			authKey = $("#auth-key").val(),
 			itemKey = $("#item-key").val(),
 			dataType = $("#data-type").val(),
 			method = $("input#method:checked").val(),
@@ -92,7 +81,12 @@ $(document).ready(function() {
 			error = false;
 
 		reset();
-		if (clientId.length == 0) {
+		if (auth && clientId.length == 0) {
+			error = true;
+			$("#client-id").parent().parent('.form-group').addClass("has-error");
+		}
+
+		if (auth && authKey.length == 0) {
 			error = true;
 			$("#client-id").parent().parent('.form-group').addClass("has-error");
 		}
@@ -116,7 +110,7 @@ $(document).ready(function() {
 			return;
 		}
 
-		return send(clientId, method, itemKey, dataType, data);
+		return send(servoUrl, clientId, method, itemKey, dataType, data);
 	});
 
 	$(resetBtn).on("click", function() {

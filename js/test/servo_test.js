@@ -22,19 +22,25 @@ var servo = require('../lib/servo.js');
     test.ifError(value)
 */
 
+var servoUrl = 'https://localhost:8080',
+  appId = 'the-app-id',
+  appKey = 'SuPeR$eCrEt',
+  authMode = 'HS512';
+
 exports['servo_tests'] = {
+
   setUp: function(done) {
     // fixme: run servo instance here
     done();
   },
 
   constuct: function(test) {
-    var servoUrl = 'https://localhost:8080',
-        appId = 'the-app-id',
-        appKey = 'SuPeR$eCrEt',
-        authMode = 'HS512',
-        s = null;
-    
+    // empty ctor
+    var s = servo.Servo();
+    test.equal(s.baseurl, undefined, 'baseurl should be empty.');
+    s.setUrl(servoUrl);
+    test.equal(s.baseurl, servoUrl, 'baseurl should match after setUrl.');
+
     // anon ctor
     s = servo.Servo(servoUrl);
     test.equal(s.baseurl, servoUrl, 'baseurl should match.');
@@ -55,5 +61,50 @@ exports['servo_tests'] = {
     test.equal(s.algmode, authMode, 'default algmode should match.');
 
     test.done();
+  },
+
+  post: function(test) {
+    var s = servo.Servo(servoUrl);
+    s.post('foo', {
+      type: 'string',
+      body: 'foo-foo',
+      success: function(body) {
+        test.done();
+      },
+      error: function(err) {
+        test.ok(false, 'post failed: ' + err.message);
+        test.done();
+      }
+    });
+  },
+
+  get: function(test) {
+    var s = servo.Servo(servoUrl);
+    // post an item
+    s.post('bar', {
+      type: 'string',
+      body: 'bar-bar',    
+      success: function(body, req) {
+        test.equal(req.statusCode, 201);
+
+        // get it back and compare
+        s.get('bar', {
+          success: function(body, req) {
+            test.equal(req.statusCode, 200);
+            test.equal(body, 'bar-bar', 'returned string does not match');
+            test.done();
+          },
+          error: function(err, req) {
+            test.ok(false, 'get failed: ' + err.message);
+            test.done();
+          }
+        });
+      },
+      error: function(err, req) {
+        test.ok(false, 'post failed: ' + err.message);
+        test.done();
+      }
+    });
   }
+
 };
