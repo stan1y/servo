@@ -53,15 +53,15 @@ function isBrowser() {
 
 	ServoClient.prototype.do = function(method, key, opts) {
 		var headers = {},
-				uri = this.baseurl + "/" + encodeURIComponent(key),
-				req = {
-					method: method,
-					uri: uri,
-					rejectUnauthorized: false,
-					requestCert: true,
-					agent: false
-				},
-				self = this;
+			uri = this.baseurl + "/" + encodeURIComponent(key),
+			req = {
+				method: method,
+				uri: uri,
+				rejectUnauthorized: false,
+				requestCert: true,
+				agent: false
+			},
+			self = this;
 
 		if (!this.authHeader && this.appid && this.appkey) {
 			this.authHeader = this.buildAuthHeader();
@@ -70,27 +70,29 @@ function isBrowser() {
 			headers['authorization'] = this.authHeader;
 		}
 
-		if (!opts.type || opts.type == 'string') {
+		if (!opts.type || opts.type == 'text') {
 			headers['Content-Type'] = 'text/plain';
 			headers['Accept'] = 'text/plain';
 			if (opts.body) {
 				req['body'] = opts.body;
 			}
 		}
-		if (opts.type == 'json') {
+		else if (opts.type == 'json') {
 			headers['Content-Type'] = 'application/json';
 			headers['Accept'] = 'application/json';
 			if (opts.body) {
-				req['body'] = JSON.strigify(opts.body);
+				req['body'] = JSON.stringify(opts.body);
 			}
 		}
-		if (opts.type == 'binary') {
+		else if (opts.type == 'binary') {
 			throw "Not supported";
 		}
-
+		else {
+			throw "Unknown type: " + opts.type;
+		}
 		req.headers = headers;
+		
 		return request(req, function(err, xhr, body) {
-
 			if (!self.authHeader)
 				if (xhr.getResponseHeader)
 					self.authHeader = xhr.getResponseHeader("authorization");
@@ -113,17 +115,37 @@ function isBrowser() {
 	}
 
 	ServoClient.prototype.get = function(key, opts) {
-		return this.do('GET', key, opts);
+		return this.do('GET', key, opts || {});
 	}
 
 	ServoClient.prototype.post = function(key, opts) {
+		if (opts == undefined) {
+			throw "No body or options given to post.";
+		}
+		if (typeof opts == "string") {
+			opts = {
+				'body': opts,
+				'type': 'text'
+			};
+		}
 		return this.do('POST', key, opts);
 	}
 
 	ServoClient.prototype.put = function(key, opts) {
+		if (opts == undefined) {
+			throw "No body or options given to put.";
+		}
+		if (typeof opts == "string") {
+			opts = {
+				'body': opts,
+				'type': 'text'
+			};
+		}
+		return this.do('PUT', key, opts);
 	}
 
 	ServoClient.prototype.delete = function(key) {
+		return this.do('DELETE', key, {});
 	}
 
 	exports.Servo = function(baseurl) {

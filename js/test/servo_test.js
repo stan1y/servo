@@ -27,6 +27,12 @@ var servoUrl = 'https://localhost:8080',
   appKey = 'SuPeR$eCrEt',
   authMode = 'HS512';
 
+
+var sleepFor = function(duration) {
+    var now = new Date().getTime();
+    while(new Date().getTime() < now + duration) {} 
+}
+
 exports['servo_tests'] = {
 
   setUp: function(done) {
@@ -65,9 +71,32 @@ exports['servo_tests'] = {
 
   post: function(test) {
     var s = servo.Servo(servoUrl);
+
+    // post text
     s.post('foo', {
-      type: 'string',
+      type: 'text',
       body: 'foo-foo',
+      success: function(body, req) {
+        test.equal(req.statusCode, 201);
+        test.done();
+      },
+      error: function(err) {
+        test.ok(false, 'post failed: ' + err.message);
+        test.done();
+      }
+    });
+
+    // post with defaults
+    s.post('post-default', 'the-default');
+  },
+
+  post_json: function(test) {
+    var s = servo.Servo(servoUrl);
+
+    // post with json
+    s.post('json-key', {
+      type: 'json',
+      body: {a:1, b:2},
       success: function(body, req) {
         test.equal(req.statusCode, 201);
         test.done();
@@ -79,19 +108,23 @@ exports['servo_tests'] = {
     });
   },
 
-  get: function(test) {
+  post_get: function(test) {
     var s = servo.Servo(servoUrl);
     // post an item
     s.post('bar', {
-      type: 'string',
+      type: 'text',
       body: 'bar-bar',    
       success: function(body, req) {
-        test.equal(req.statusCode, 201);
+          
+        // check response is expected
+        test.equal(req.statusCode, 201, "unexpected response on post");
+        // check response has given us auth header
+        test.ok(s.authHeader != null, "no auth header received");
 
         // get it back and compare
         s.get('bar', {
           success: function(body, req) {
-            test.equal(req.statusCode, 200);
+            test.equal(req.statusCode, 200, "unexpected. response on get");
             test.equal(body, 'bar-bar', 'returned string does not match');
             test.done();
           },
@@ -103,6 +136,28 @@ exports['servo_tests'] = {
       },
       error: function(err, req) {
         test.ok(false, 'post failed: ' + err.message);
+        test.done();
+      }
+    });
+  },
+
+  post_get_defaults: function(test) {
+    var s = servo.Servo(servoUrl),
+        val = 'some-value';
+
+    s.post('get-defaults', val);
+    sleepFor(10);
+
+    test.ok(s.authHeader != null, "do not have auth header after waiting");
+
+    s.get('get-defaults', {
+      success: function(body, req) {
+        test.equal(req.statusCode, 200);
+        test.equal(body, val);
+        test.done();
+      },
+      error: function(err, req) {
+        test.ok(false, 'get failed: ' + err.message);
         test.done();
       }
     });
