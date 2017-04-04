@@ -55,7 +55,9 @@ servo_state_init(struct http_request *req)
             servo_delete_context(req);
             return (HTTP_STATE_COMPLETE);
         }
-    }    
+    }
+
+    // set Authorization header
     servo_write_context_token(req);
 
     // set Access-Control-Allow-Origin header accoring to config
@@ -66,11 +68,23 @@ servo_state_init(struct http_request *req)
         http_response_header(req, CORS_ALLOWORIGIN_HEADER, "*");   
     }
 
+    // finish request now for OPTIONS and HEAD methods
+    // since we need to respond with CORS *-Allow-* headers
+    if (req->method == HTTP_METHOD_OPTIONS ||
+        req->method == HTTP_METHOD_HEAD) {
+        
+        http_response_header(req, CORS_ALLOW_HEADER, AUTH_HEADER);
+        servo_delete_context(req);
+        servo_response_status(req, 200, http_status_text(200));
+        return (HTTP_STATE_COMPLETE);
+    }
+
     // set Access-Control-Expose-Headers to allow auth header
+    // as indicated by Access-Control-Allow-Headers
     http_response_header(req, CORS_EXPOSE_HEADER, AUTH_HEADER);
     
 
-    // render console html or stats for client bootstrap
+    // render stats for client bootstrap
     if (!servo_is_item_request(req)) {
         rc = servo_render_stats(req);
         servo_delete_context(req);
@@ -320,7 +334,7 @@ int servo_state_read(struct http_request *req)
     json_error_t            jerr;
 
     if (req->method != HTTP_METHOD_GET) {
-        kore_log(LOG_ERR, "%s: can not %s item", 
+        kore_log(LOG_ERR, "%s: method '%s' is forbidden for item", 
                  __FUNCTION__,
                  http_method_text(req->method));
         return HTTP_STATE_ERROR;

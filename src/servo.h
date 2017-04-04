@@ -32,6 +32,7 @@
 #define AUTH_TYPE_PREFIX        "Bearer "
 #define CORS_ALLOWORIGIN_HEADER "access-control-allow-origin"
 #define CORS_EXPOSE_HEADER      "access-control-expose-headers"
+#define CORS_ALLOW_HEADER       "access-control-allow-headers"
 
 static char* DBNAME = "servo-store";
 
