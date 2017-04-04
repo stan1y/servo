@@ -30,6 +30,8 @@
 #define ROOT_PATH               "/"
 #define AUTH_HEADER             "authorization"
 #define AUTH_TYPE_PREFIX        "Bearer "
+#define CORS_ALLOWORIGIN_HEADER "access-control-allow-origin"
+#define CORS_EXPOSE_HEADER      "access-control-expose-headers"
 
 static char* DBNAME = "servo-store";
 
@@ -107,8 +109,6 @@ int                      servo_purge_context(struct servo_context *);
 int                      servo_init(int state);
 int                      servo_start(struct http_request *);
 int                      servo_render_stats(struct http_request *);
-int                      servo_render_console(struct http_request *);
-int                      servo_render_console_js(struct http_request *);
 
 int                      servo_state_init(struct http_request *);
 int                      servo_state_query(struct http_request *);

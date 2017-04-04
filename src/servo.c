@@ -60,7 +60,6 @@ servo_delete_context(struct http_request *req)
     http_state_cleanup(req);
 }
 
-
 int
 servo_init(int state)
 {
@@ -137,8 +136,6 @@ servo_init_context(struct servo_context *ctx)
 
     ctx->client = kore_malloc(CLIENT_UUID_LEN);
     uuid_unparse(client_uuid, ctx->client);
-    kore_log(LOG_DEBUG, "new client without identifier, generated {%s}",
-             ctx->client);
 
     if (jwt_new(&ctx->token) != 0) {
         kore_log(LOG_ERR, "%s: failed to allocate jwt",
@@ -194,7 +191,7 @@ servo_read_context_token(struct http_request *req)
 {
     int                      n;
     struct servo_context    *ctx;
-    char                    *token_hdr,
+    char                    *t, *token_hdr,
                             *hdr_parts[3];
     const char              *client_id;
 
@@ -205,23 +202,19 @@ servo_read_context_token(struct http_request *req)
         return (KORE_RESULT_ERROR);
     }
 
-    if (!http_request_header(req, AUTH_HEADER, &token_hdr)) {
-        kore_log(LOG_DEBUG, "no token header sent");
+    if (!http_request_header(req, AUTH_HEADER, &t)) {
         return (KORE_RESULT_ERROR);
     }
 
-    n = kore_split_string(token_hdr, " ", hdr_parts, 2);
+    token_hdr = kore_strdup(t);
+    n = kore_split_string(token_hdr, " ", hdr_parts, 3);
+    kore_free(token_hdr);
     if (n != 2) {
-        kore_log(LOG_ERR, "%s: invalid header format - '%s'",
+        kore_log(LOG_ERR, "%s: invalid header format, n=%d - '%s'",
                           __FUNCTION__,
-                          token_hdr);
+                          n, t);
         return (KORE_RESULT_ERROR);
     }
-
-    kore_log(LOG_DEBUG, "token of '%s' = '%s'",
-                        hdr_parts[0],
-                        hdr_parts[1]);
-    
     /* parse and verify json web token */
     if (jwt_decode(&ctx->token, 
                     hdr_parts[1],
@@ -256,6 +249,31 @@ servo_start(struct http_request *req)
         http_state_create(req, sizeof(struct servo_context));
     }
     return (http_state_run(servo_session_states, servo_session_states_size, req));
+}
+
+int
+servo_render_stats(struct http_request *req)
+{
+    int                      rc;
+    json_t                  *stats;
+    struct servo_context    *ctx;
+    time_t                   last_read, last_write;
+
+    rc = KORE_RESULT_OK;
+    ctx = (struct servo_context *)http_state_get(req);
+    // FIXME: real stats here
+    last_read = time(NULL);
+    last_write = time(NULL);    
+    stats = json_pack("{s:s s:s s:s s:i}",
+              "client",      ctx->client,
+              "last_read",   servo_format_date(&last_read),
+              "last_write",  servo_format_date(&last_write),
+              "session_ttl", CONFIG->session_ttl);
+    servo_response_json(req, 200, stats);
+    json_decref(stats);
+    
+    kore_log(LOG_NOTICE, "rendering stats for {%s}", ctx->client);
+    return rc;
 }
 
 int
@@ -392,6 +410,7 @@ int state_done(struct http_request *req)
     struct servo_context    *ctx = http_state_get(req);
     const char              *output;
 
+    ctx->status = 200;
     if (req->method == HTTP_METHOD_POST ||
         req->method == HTTP_METHOD_PUT) 
     {

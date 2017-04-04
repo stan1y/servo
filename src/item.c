@@ -55,19 +55,30 @@ servo_state_init(struct http_request *req)
             servo_delete_context(req);
             return (HTTP_STATE_COMPLETE);
         }
-    }
-    
+    }    
     servo_write_context_token(req);
-    servo_read_content_types(req);
+
+    // set Access-Control-Allow-Origin header accoring to config
+    if (CONFIG->allow_origin != NULL) {
+        http_response_header(req, CORS_ALLOWORIGIN_HEADER, CONFIG->allow_origin);
+    }
+    else {
+        http_response_header(req, CORS_ALLOWORIGIN_HEADER, "*");   
+    }
+
+    // set Access-Control-Expose-Headers to allow auth header
+    http_response_header(req, CORS_EXPOSE_HEADER, AUTH_HEADER);
+    
 
     // render console html or stats for client bootstrap
     if (!servo_is_item_request(req)) {
-        if (CONFIG->public_mode && ctx->out_content_type == SERVO_CONTENT_HTML)
-            rc = servo_render_console(req);
-        else
-            rc = servo_render_stats(req);
-
+        rc = servo_render_stats(req);
         servo_delete_context(req);
+        if (rc != KORE_RESULT_OK) {
+            kore_log(LOG_ERR, "%s: failed to render stats.",
+                              __FUNCTION__);
+            return (HTTP_STATE_ERROR);
+        }
         return (HTTP_STATE_COMPLETE);
     }
 
@@ -225,19 +236,6 @@ servo_state_query(struct http_request *req)
 
     rc = KORE_RESULT_OK;
     ctx = (struct servo_context*)http_state_get(req);
-
-    if (!servo_is_item_request(req)) {
-        kore_pgsql_cleanup(&ctx->sql);
-
-        if (CONFIG->public_mode)
-            rc = servo_render_console(req);
-        else
-            rc = servo_render_stats(req);
-
-        servo_delete_context(req);
-        return (rc == KORE_RESULT_OK ? HTTP_STATE_COMPLETE : HTTP_STATE_ERROR);
-    }
-
     body = servo_request_data(req);
 
     /* Check size limitations */
