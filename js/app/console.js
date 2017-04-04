@@ -28,14 +28,7 @@ $(document).ready(function() {
 		$("div.form-group").removeClass("has-error");
 	};
 
-	var send = function(servoUrl, clientId, method, itemKey, dataType, data) {
-		var dataTypesMap = { 
-			text: 'text/plain; charset=UTF-8',
-			json: 'application/json; charset=UTF-8',
-			binary: 'multipart/form-data; charset=UTF-8' 
-		};
-		
-		s.setUrl(servoUrl);
+	var send = function(s, clientId, method, itemKey, dataType, data) {
 		s.do(method, itemKey, {
 			type: dataType,
 			body: data,
@@ -55,17 +48,6 @@ $(document).ready(function() {
 				$("#response").val(JSON.stringify(err));
 			}
 		});
-
-		// $.ajax(servoUrl, {
-		//  method: method,
-		//  data: data,
-		//  dataType: dataType,
-		//  accepts: dataTypesMap,
-		//  contentType: dataTypesMap[dataType],
-		//  error: onServoError,
-		//  success: onServoSuccess,
-		//  processData: false
-		// });
 	};
 
 	$(sendBtn).on("click", function() {
@@ -110,7 +92,8 @@ $(document).ready(function() {
 			return;
 		}
 
-		return send(servoUrl, clientId, method, itemKey, dataType, data);
+		s.setUrl(servoUrl);
+		return send(s, clientId, method, itemKey, dataType, data);
 	});
 
 	$(resetBtn).on("click", function() {
