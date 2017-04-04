@@ -139,28 +139,6 @@ exports['servo_tests'] = {
         test.done();
       }
     });
-  },
-
-  post_get_defaults: function(test) {
-    var s = servo.Servo(servoUrl),
-        val = 'some-value';
-
-    s.post('get-defaults', val);
-    sleepFor(10);
-
-    test.ok(s.authHeader != null, "do not have auth header after waiting");
-
-    s.get('get-defaults', {
-      success: function(body, req) {
-        test.equal(req.statusCode, 200);
-        test.equal(body, val);
-        test.done();
-      },
-      error: function(err, req) {
-        test.ok(false, 'get failed: ' + err.message);
-        test.done();
-      }
-    });
   }
 
 };
