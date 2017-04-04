@@ -68,7 +68,8 @@ exports['servo_tests'] = {
     s.post('foo', {
       type: 'string',
       body: 'foo-foo',
-      success: function(body) {
+      success: function(body, req) {
+        test.equal(req.statusCode, 201);
         test.done();
       },
       error: function(err) {

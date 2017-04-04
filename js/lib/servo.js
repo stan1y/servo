@@ -63,7 +63,6 @@ function isBrowser() {
 				},
 				self = this;
 
-		console.log('calling ' + method + ' ' + uri);
 		if (!this.authHeader && this.appid && this.appkey) {
 			this.authHeader = this.buildAuthHeader();
 		}
