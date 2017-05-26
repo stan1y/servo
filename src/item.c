@@ -190,6 +190,9 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
                 kore_log(LOG_ERR, "%s: broken json - %s",
                          __FUNCTION__,
                          ctx->err);
+                kore_log(LOG_ERR, "--start--");
+                kore_log(LOG_ERR, "%s", val_str);
+                kore_log(LOG_ERR, "--end--");
                 return (KORE_RESULT_ERROR);
             }
             rc = kore_pgsql_query_params(&ctx->sql, 

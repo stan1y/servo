@@ -245,9 +245,6 @@ servo_read_content_types(struct http_request *req)
             ctx->in_content_type = SERVO_CONTENT_BLOB;
         else
             ctx->in_content_type = SERVO_CONTENT_STRING;
-        kore_log(LOG_DEBUG, "client content type sent: %s (%s)",
-                 content_type,
-                 SERVO_CONTENT_NAMES[ctx->in_content_type]);
     }
 
     if (http_request_header(req, "accept", &accept)) {
@@ -259,9 +256,6 @@ servo_read_content_types(struct http_request *req)
             ctx->out_content_type = SERVO_CONTENT_BLOB;
         else
             ctx->out_content_type = SERVO_CONTENT_STRING;
-        kore_log(LOG_DEBUG, "client content type accepts: %s (%s)",
-                 accept,
-                 SERVO_CONTENT_NAMES[ctx->out_content_type]);
     }
 
     /* fixme: handle Accept-Encoding here */
