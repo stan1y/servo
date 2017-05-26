@@ -416,10 +416,10 @@ int state_done(struct http_request *req)
     {
         switch(ctx->out_content_type) {
             case SERVO_CONTENT_STRING:
-                http_response_header(req, "content-type", CONTENT_TYPE_STRING);
+                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_STRING);
                 break;
             case SERVO_CONTENT_JSON:
-                http_response_header(req, "content-type", CONTENT_TYPE_JSON);
+                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_JSON);
                 break;
 
         }
@@ -457,7 +457,7 @@ int state_done(struct http_request *req)
             default:
             case SERVO_CONTENT_STRING:
                 output = servo_item_to_string(ctx);
-                http_response_header(req, "content-type", CONTENT_TYPE_STRING);
+                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_STRING);
                 http_response(req, ctx->status, 
                               output == NULL ? "" : output,
                               output == NULL ? 0 : strlen(output));
@@ -465,7 +465,7 @@ int state_done(struct http_request *req)
 
             case SERVO_CONTENT_JSON:
                 output = servo_item_to_json(ctx);
-                http_response_header(req, "content-type", CONTENT_TYPE_JSON);
+                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_JSON);
                 http_response(req, ctx->status,
                               output == NULL ? "" : output,
                               output == NULL ? 0 : strlen(output));

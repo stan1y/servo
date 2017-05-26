@@ -21,16 +21,6 @@
 
 #include "servo.h"
 
-#define CONTENT_TYPE_STRING     "text/plain"
-#define CONTENT_TYPE_JSON       "application/json"
-#define CONTENT_TYPE_BLOB       "multipart/form-data"
-#define CONTENT_TYPE_HTML       "text/html"
-
-#define SERVO_CONTENT_STRING    0
-#define SERVO_CONTENT_HTML      1
-#define SERVO_CONTENT_JSON      2
-#define SERVO_CONTENT_BLOB      3
-
 int                  servo_read_config(struct servo_config *);
 
 int                  servo_is_item_request(struct http_request *);

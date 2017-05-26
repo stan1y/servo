@@ -57,6 +57,9 @@ servo_state_init(struct http_request *req)
         }
     }
 
+    // read & init content types
+    servo_read_content_types(req);
+
     // set Authorization header
     servo_write_context_token(req);
 
@@ -74,6 +77,7 @@ servo_state_init(struct http_request *req)
         req->method == HTTP_METHOD_HEAD) {
         
         http_response_header(req, CORS_ALLOW_HEADER, AUTH_HEADER);
+        http_response_header(req, CORS_ALLOW_HEADER, CONTENT_TYPE_HEADER);
         servo_delete_context(req);
         servo_response_status(req, 200, http_status_text(200));
         return (HTTP_STATE_COMPLETE);

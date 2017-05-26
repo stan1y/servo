@@ -167,7 +167,7 @@ void servo_response_json(struct http_request * req,
     json = json_dumps(data, JSON_ENCODE_ANY);
     kore_buf_append(buf, json, strlen(json));
 
-    http_response_header(req, "content-type", CONTENT_TYPE_JSON);
+    http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_JSON);
     http_response(req, http_code, buf->data, buf->offset);
     kore_buf_free(buf);
     free(json);
@@ -235,6 +235,21 @@ servo_read_content_types(struct http_request *req)
     struct servo_context    *ctx;
 
     ctx = (struct servo_context*)http_state_get(req);
+
+    if (http_request_header(req, CONTENT_TYPE_HEADER, &content_type)) {
+        if (strstr(content_type, CONTENT_TYPE_HTML) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_HTML;
+        else if (strstr(content_type, CONTENT_TYPE_JSON) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_JSON;
+        else if (strstr(content_type, CONTENT_TYPE_BLOB) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_BLOB;
+        else
+            ctx->in_content_type = SERVO_CONTENT_STRING;
+        kore_log(LOG_DEBUG, "client content type sent: %s (%s)",
+                 content_type,
+                 SERVO_CONTENT_NAMES[ctx->in_content_type]);
+    }
+
     if (http_request_header(req, "accept", &accept)) {
         if (strstr(accept, CONTENT_TYPE_HTML) != NULL)
             ctx->out_content_type = SERVO_CONTENT_HTML;
@@ -244,17 +259,9 @@ servo_read_content_types(struct http_request *req)
             ctx->out_content_type = SERVO_CONTENT_BLOB;
         else
             ctx->out_content_type = SERVO_CONTENT_STRING;
-    }
-
-    if (http_request_header(req, "content-type", &content_type)) {
-        if (strstr(content_type, CONTENT_TYPE_HTML) != NULL)
-            ctx->in_content_type = SERVO_CONTENT_HTML;
-        else if (strstr(content_type, CONTENT_TYPE_JSON) != NULL)
-            ctx->in_content_type = SERVO_CONTENT_JSON;
-        else if (strstr(content_type, CONTENT_TYPE_BLOB) != NULL)
-            ctx->in_content_type = SERVO_CONTENT_BLOB;
-        else
-            ctx->in_content_type = SERVO_CONTENT_STRING;
+        kore_log(LOG_DEBUG, "client content type accepts: %s (%s)",
+                 accept,
+                 SERVO_CONTENT_NAMES[ctx->out_content_type]);
     }
 
     /* fixme: handle Accept-Encoding here */

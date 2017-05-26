@@ -29,10 +29,21 @@
 #define CONSOLE_JS_PATH         "/console.js"
 #define ROOT_PATH               "/"
 #define AUTH_HEADER             "authorization"
+#define CONTENT_TYPE_HEADER     "content-type"
 #define AUTH_TYPE_PREFIX        "Bearer "
 #define CORS_ALLOWORIGIN_HEADER "access-control-allow-origin"
 #define CORS_EXPOSE_HEADER      "access-control-expose-headers"
 #define CORS_ALLOW_HEADER       "access-control-allow-headers"
+
+#define CONTENT_TYPE_STRING     "text/plain"
+#define CONTENT_TYPE_JSON       "application/json"
+#define CONTENT_TYPE_BLOB       "multipart/form-data"
+#define CONTENT_TYPE_HTML       "text/html"
+
+#define SERVO_CONTENT_STRING    0
+#define SERVO_CONTENT_HTML      1
+#define SERVO_CONTENT_JSON      2
+#define SERVO_CONTENT_BLOB      3
 
 static char* DBNAME = "servo-store";
 
@@ -48,6 +59,7 @@ static char    *SQL_STATE_NAMES[] = {
 
 static char    *SERVO_CONTENT_NAMES[] = {
     "string",
+    "html",
     "json",
     "binary"
 };
