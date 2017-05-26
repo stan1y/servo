@@ -90,15 +90,29 @@ exports['servo_tests'] = {
     s.post('post-default', 'the-default');
   },
 
-  post_json: function(test) {
-    var s = servo.Servo(servoUrl);
+  post_get_json: function(test) {
+    var s = servo.Servo(servoUrl),
+        json_data = {a:1, b:2};
 
     // post with json
     s.post('json-key', {
       type: 'json',
-      body: {a:1, b:2},
+      body: json_data,
       success: function(body, req) {
-        test.equal(req.statusCode, 201);
+        test.equal(req.statusCode, 201, "unexpected response on post");
+        test.ok(s.authHeader != null, "no auth header received");
+
+        s.get('json-key', {
+          type: 'json',
+          success: function(body, req) {
+            test.equal(req.statusCode, 200, "unexpected response on get");
+            for(var k in json_data) {
+              test.equal(json_data[k], body[k], 'returned json does not match: '  
+                + json_data[k] + '!=' + body[k]);
+            }
+            test.done();  
+          }
+        });
         test.done();
       },
       error: function(err) {
@@ -115,16 +129,12 @@ exports['servo_tests'] = {
       type: 'text',
       body: 'bar-bar',    
       success: function(body, req) {
-          
-        // check response is expected
         test.equal(req.statusCode, 201, "unexpected response on post");
-        // check response has given us auth header
         test.ok(s.authHeader != null, "no auth header received");
 
-        // get it back and compare
         s.get('bar', {
           success: function(body, req) {
-            test.equal(req.statusCode, 200, "unexpected. response on get");
+            test.equal(req.statusCode, 200, "unexpected response on get");
             test.equal(body, 'bar-bar', 'returned string does not match');
             test.done();
           },
