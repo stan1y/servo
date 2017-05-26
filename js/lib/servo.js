@@ -81,7 +81,7 @@ function isBrowser() {
 		else if (opts.type == 'json') {
 			headers['Content-Type'] = 'application/json';
 			headers['Accept'] = 'application/json';
-			if (opts.body) {
+			if (opts.body && typeof opts.body == 'object') {
 				req['body'] = JSON.stringify(opts.body);
 			}
 		}
@@ -100,14 +100,24 @@ function isBrowser() {
 				if (xhr.headers)
 					self.authHeader = xhr.headers["authorization"];
 			
-			try { body = (body != null ? JSON.parse(body) : {code:0, message:err}); }
-			catch(e) {}
+			if (headers['Accept'] == 'application/json' && body) {
+				try { 
+					body = JSON.parse(body);
+				}
+				catch(e) {
+					body = {code: 0, message: "invalid json: " + e };
+				}
+			}
+
+			if (typeof body == 'object' && body.code && body.message) {
+				if (body.code != 200 && body.code != 201) {
+					err = 'servo error code: ' + body.code + ', ' + body.message;
+				}
+			}
 
 			if (err && opts.error) {
+				console.log('error occured: ' + err);
 				opts.error.apply(this, [body, xhr]);
-			}
-			else if (typeof body == 'object' && body.code && body.message) {
-				opts.error.apply(this, [body, xhr]);	
 			}
 			else if (opts.success) {
 				opts.success.apply(this, [body, xhr]);
