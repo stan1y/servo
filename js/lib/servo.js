@@ -53,7 +53,8 @@ function isBrowser() {
 
 	ServoClient.prototype.do = function(method, key, opts) {
 		var headers = {},
-			uri = this.baseurl + "/" + encodeURIComponent(key),
+			path = key.startsWith("/", key) ? key : ("/" + key),
+			uri = this.baseurl + path,
 			req = {
 				method: method,
 				uri: uri,
