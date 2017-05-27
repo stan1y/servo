@@ -81,13 +81,44 @@ exports['servo_tests'] = {
         test.done();
       },
       error: function(err) {
-        test.ok(false, 'post failed: ' + err.message);
+        test.ok(false, 'post failed: ' + err);
         test.done();
       }
     });
+  },
 
-    // post with defaults
-    s.post('post-default', 'the-default');
+  /*defaults: function(test) {
+    test.done();
+
+    
+    var s = servo.Servo(servoUrl);
+    s.post('default-test', 'the-default-value');
+    s.put('default-test', 'modified-value');
+    s.get('default-test', {
+      success: function(body, req) {
+        test.equal(req.statusCode, 200, "unexpected response on get");
+        test.equal(body, 'modified-value', 'unpexpected value returned');
+        test.done(); 
+      },
+      error: function(err) {
+        test.ok(false, 'get failed: ' + err.message);
+        test.done(); 
+      }
+    });
+  },*/
+
+  upload_file: function (test) {
+    var s = servo.Servo(servoUrl);
+    s.upload('test-upload', 'file.txt', {
+      success: function(body, req) {
+        test.equal(req.statusCode, 201, "unexpected response on upload(post)");
+        test.done();
+      },
+      error: function(err) {
+        test.ok(false, 'upload failed: ' + err);
+        test.done();
+      }
+    });
   },
 
   post_get_json: function(test) {
@@ -111,6 +142,9 @@ exports['servo_tests'] = {
                 + json_data[k] + '!=' + body[k]);
             }
             test.done();  
+          },
+          error: function(err) {
+            test.ok(false, "get failed:" + err.message);
           }
         });
         test.done();

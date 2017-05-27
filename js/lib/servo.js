@@ -23,12 +23,15 @@ function isBrowser() {
 
 	'use strict';
 
+	
 	if (isBrowser()) {
 		var request = require('browser-request');
 	}
 	else {
 		var request = require('request');
 	}
+	var FormData = require('form-data'),
+		      fs = require('fs');
 
 	function ServoClient(baseurl) {
 		this.baseurl = baseurl;
@@ -53,6 +56,7 @@ function isBrowser() {
 
 	ServoClient.prototype.do = function(method, key, opts) {
 		var headers = {},
+			form = new FormData(),
 			path = key.startsWith("/", key) ? key : ("/" + key),
 			uri = this.baseurl + path,
 			req = {
@@ -79,25 +83,32 @@ function isBrowser() {
 			}
 		}
 		else if (opts.type == 'json') {
-			headers['Content-Type'] = 'application/json';
 			headers['Accept'] = 'application/json';
 			if (opts.body && typeof opts.body == 'object') {
+				headers['Content-Type'] = 'application/json';
 				req['body'] = JSON.stringify(opts.body);
 			}
 		}
-		else if (opts.type == 'binary') {
-			throw "Not supported";
+		else if (opts.type == 'form-data') {
+			headers['Accept'] = 'multipart/form-data';
+			if (opts.body && typeof opts.body == 'string') {
+				var stream = fs.createReadStream(opts.body);
+				headers['Content-Type'] = 'multipart/form-data';
+				headers['Content-Length'] = 'multipart/form-data';
+				form.append('file', stream);
+				req.form = form;
+			}
 		}
 		else {
 			throw "Unknown type: " + opts.type;
 		}
 		req.headers = headers;
 		
-		return request(req, function(err, xhr, body) {
+		request(req, function(err, xhr, body) {
 			if (!self.authHeader)
-				if (xhr.getResponseHeader)
+				if (xhr && xhr.getResponseHeader)
 					self.authHeader = xhr.getResponseHeader("authorization");
-				if (xhr.headers)
+				if (xhr && xhr.headers)
 					self.authHeader = xhr.headers["authorization"];
 			
 			if (headers['Accept'] == 'application/json' && body) {
@@ -123,6 +134,22 @@ function isBrowser() {
 				opts.success.apply(this, [body, xhr]);
 			}
 		});
+	}
+
+	ServoClient.prototype.upload = function(key, filename, opts) {
+		// file can be sent as base64 or form-data
+		if (typeof opts == "string") {
+			opts = {
+				'type': opts
+			};
+		}
+		if (opts == undefined) {
+			opts = {
+				'type': 'form-data'
+			}
+		}
+		opts['body'] = filename;
+		return this.do('POST', key, opts);
 	}
 
 	ServoClient.prototype.get = function(key, opts) {
