@@ -241,8 +241,10 @@ servo_read_content_types(struct http_request *req)
             ctx->in_content_type = SERVO_CONTENT_HTML;
         else if (strstr(content_type, CONTENT_TYPE_JSON) != NULL)
             ctx->in_content_type = SERVO_CONTENT_JSON;
-        else if (strstr(content_type, CONTENT_TYPE_BLOB) != NULL)
-            ctx->in_content_type = SERVO_CONTENT_BLOB;
+        else if (strstr(content_type, CONTENT_TYPE_FORMDATA) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_FORMDATA;
+        else if (strstr(content_type, CONTENT_TYPE_BASE64) != NULL)
+            ctx->in_content_type = SERVO_CONTENT_BASE64;
         else
             ctx->in_content_type = SERVO_CONTENT_STRING;
     }
@@ -252,8 +254,10 @@ servo_read_content_types(struct http_request *req)
             ctx->out_content_type = SERVO_CONTENT_HTML;
         else if (strstr(accept, CONTENT_TYPE_JSON) != NULL)
             ctx->out_content_type = SERVO_CONTENT_JSON;
-        else if (strstr(accept, CONTENT_TYPE_BLOB) != NULL)
-            ctx->out_content_type = SERVO_CONTENT_BLOB;
+        else if (strstr(accept, CONTENT_TYPE_FORMDATA) != NULL)
+            ctx->out_content_type = SERVO_CONTENT_FORMDATA;
+        else if (strstr(accept, CONTENT_TYPE_BASE64) != NULL)
+            ctx->out_content_type = SERVO_CONTENT_BASE64;
         else
             ctx->out_content_type = SERVO_CONTENT_STRING;
     }
@@ -306,7 +310,7 @@ servo_item_to_string(struct servo_context *ctx)
             return ctx->val_str;
         case SERVO_CONTENT_JSON:
             return json_dumps(ctx->val_json, JSON_INDENT(2));
-        case SERVO_CONTENT_BLOB:
+        case SERVO_CONTENT_FORMDATA:
             kore_base64_encode(ctx->val_blob, ctx->val_sz, &b64);
             return b64;
     }

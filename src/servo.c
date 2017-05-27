@@ -421,6 +421,12 @@ int state_done(struct http_request *req)
             case SERVO_CONTENT_JSON:
                 http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_JSON);
                 break;
+            case SERVO_CONTENT_FORMDATA:
+                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_FORMDATA);
+                break;
+            case SERVO_CONTENT_BASE64:
+                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_JSON);
+                break;
 
         }
         /* reply 201 Created on POSTs */
@@ -430,7 +436,7 @@ int state_done(struct http_request *req)
         output = http_status_text(ctx->status);
         switch(ctx->out_content_type) {
             default:
-            case SERVO_CONTENT_BLOB:
+            case SERVO_CONTENT_FORMDATA:
                 break;
 
             case SERVO_CONTENT_STRING:
@@ -471,7 +477,7 @@ int state_done(struct http_request *req)
                               output == NULL ? 0 : strlen(output));
                 break;
 
-            case SERVO_CONTENT_BLOB:
+            case SERVO_CONTENT_FORMDATA:
                 servo_response_status(req, 403, http_status_text(403));
                 break;
 

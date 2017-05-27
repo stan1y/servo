@@ -37,13 +37,23 @@
 
 #define CONTENT_TYPE_STRING     "text/plain"
 #define CONTENT_TYPE_JSON       "application/json"
-#define CONTENT_TYPE_BLOB       "multipart/form-data"
+#define CONTENT_TYPE_FORMDATA   "multipart/form-data"
+#define CONTENT_TYPE_BASE64     "application/base64"
 #define CONTENT_TYPE_HTML       "text/html"
 
+static char    *SERVO_CONTENT_NAMES[] = {
+    CONTENT_TYPE_STRING,
+    CONTENT_TYPE_JSON,
+    CONTENT_TYPE_FORMDATA,
+    CONTENT_TYPE_BASE64,
+    CONTENT_TYPE_HTML
+};
+
 #define SERVO_CONTENT_STRING    0
-#define SERVO_CONTENT_HTML      1
-#define SERVO_CONTENT_JSON      2
-#define SERVO_CONTENT_BLOB      3
+#define SERVO_CONTENT_JSON      1
+#define SERVO_CONTENT_FORMDATA  2
+#define SERVO_CONTENT_BASE64    3
+#define SERVO_CONTENT_HTML      4
 
 static char* DBNAME = "servo-store";
 
@@ -55,13 +65,6 @@ static char    *SQL_STATE_NAMES[] = {
     "error",    // KORE_PGSQL_STATE_ERROR
     "done",     // KORE_PGSQL_STATE_DONE
     "complete"  // KORE_PGSQL_STATE_COMPLETE
-};
-
-static char    *SERVO_CONTENT_NAMES[] = {
-    "string",
-    "html",
-    "json",
-    "binary"
 };
 
 struct servo_config {

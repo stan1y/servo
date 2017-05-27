@@ -219,7 +219,7 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
                                 PGSQL_FORMAT_TEXT);
             break;
 
-        case SERVO_CONTENT_BLOB:
+        case SERVO_CONTENT_FORMDATA:
             val_blob = kore_buf_stringify(body, &val_blob_sz);
             rc = kore_pgsql_query_params(&ctx->sql, 
                                 (const char*)asset_post_item_sql, 
@@ -273,7 +273,7 @@ servo_state_query(struct http_request *req)
                 too_big = 1;
             }
             break;
-        case SERVO_CONTENT_BLOB:
+        case SERVO_CONTENT_FORMDATA:
             if (body->offset > CONFIG->blob_size) {
                 too_big = 1;
             }
@@ -396,7 +396,7 @@ int servo_state_read(struct http_request *req)
         if (ctx->val_json != NULL)
             ctx->in_content_type = SERVO_CONTENT_JSON;
         if (ctx->val_blob != NULL)
-            ctx->in_content_type = SERVO_CONTENT_BLOB;
+            ctx->in_content_type = SERVO_CONTENT_FORMDATA;
     }
     else {
         kore_log(LOG_ERR, "%s: selected %d rows, 1 expected",
