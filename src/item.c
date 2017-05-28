@@ -56,6 +56,10 @@ servo_state_init(struct http_request *req)
             return (HTTP_STATE_COMPLETE);
         }
     }
+    kore_log(LOG_DEBUG, "{%s} %s %s started",
+                        ctx->client,
+                        http_method_text(req->method),
+                        req->path);
 
     // read & init content types
     servo_read_content_types(req);
@@ -78,8 +82,16 @@ servo_state_init(struct http_request *req)
         
         http_response_header(req, CORS_ALLOW_HEADER, AUTH_HEADER);
         http_response_header(req, CORS_ALLOW_HEADER, CONTENT_TYPE_HEADER);
-        servo_delete_context(req);
         servo_response_status(req, 200, http_status_text(200));
+
+        kore_log(LOG_ERR, "%s %s by {%s} authorized with %d: %s",
+            http_method_text(req->method),
+            req->path,
+            ctx->client,
+            ctx->status,
+            http_status_text(ctx->status));
+
+        servo_delete_context(req);
         return (HTTP_STATE_COMPLETE);
     }
 
@@ -116,7 +128,6 @@ int state_handle_get(struct http_request *req)
     struct servo_context    *ctx;
 
     ctx = (struct servo_context*)http_state_get(req);
-    kore_log(LOG_NOTICE, "GET %s for {%s}", req->path, ctx->client);
     return kore_pgsql_query_params(&ctx->sql, 
                                 (const char*)asset_get_item_sql, 
                                 PGSQL_FORMAT_TEXT,
@@ -146,10 +157,10 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
 
     rc = KORE_RESULT_OK;
     ctx = (struct servo_context*)http_state_get(req);
-    kore_log(LOG_NOTICE, "POST %s, %zu bytes (%s) read from {%s}",
-        req->path, body->offset,
-        SERVO_CONTENT_NAMES[ctx->in_content_type],
-        ctx->client);
+    kore_log(LOG_NOTICE, "{%s} read %zu bytes (%s)",
+        ctx->client,
+        body->offset,
+        SERVO_CONTENT_NAMES[ctx->in_content_type]);
 
     switch(ctx->in_content_type) {
         default:
@@ -187,12 +198,12 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
                 snprintf(ctx->err, 512,
                          "%s at line: %d, column: %d, pos: %d",
                          jerr.text, jerr.line, jerr.column, jerr.position);
-                kore_log(LOG_ERR, "%s: broken json - %s",
-                         __FUNCTION__,
+                kore_log(LOG_ERR, "{%s} broken json - %s",
+                         ctx->client,
                          ctx->err);
-                kore_log(LOG_ERR, "--start--");
-                kore_log(LOG_ERR, "%s", val_str);
-                kore_log(LOG_ERR, "--end--");
+                kore_log(LOG_ERR, "{%s} --start--", ctx->client);
+                kore_log(LOG_ERR, "{%s} %s", ctx->client, val_str);
+                kore_log(LOG_ERR, "{%s} --end--", ctx->client);
                 return (KORE_RESULT_ERROR);
             }
             rc = kore_pgsql_query_params(&ctx->sql, 
@@ -257,6 +268,10 @@ servo_state_query(struct http_request *req)
 
     rc = KORE_RESULT_OK;
     ctx = (struct servo_context*)http_state_get(req);
+
+    kore_log(LOG_DEBUG, "{%s} quering item with key '%s'",
+                        ctx->client,
+                        req->path);
     body = servo_request_data(req);
 
     /* Check size limitations */
@@ -290,7 +305,7 @@ servo_state_query(struct http_request *req)
     /* Handle item operation in http method */
     switch(req->method) {
         case HTTP_METHOD_POST:
-            rc = state_handle_post(req, body); 
+            rc = state_handle_post(req, body);
             break;
 
         case HTTP_METHOD_PUT:
@@ -321,7 +336,12 @@ servo_state_query(struct http_request *req)
         return (HTTP_STATE_CONTINUE);
     }
 
-    /* Wait for item request completition */
+    kore_log(LOG_DEBUG, "{%s} requested io, state: %s, sql: %s, next: %s",
+                        ctx->client,
+                        servo_state_text(req->fsm_state),
+                        sql_state_text(ctx->sql.state),
+                        servo_state_text(REQ_STATE_WAIT));
+    /* Wait for IO request completition */    
     req->fsm_state = REQ_STATE_WAIT;
     return HTTP_STATE_CONTINUE;
 }
@@ -340,9 +360,11 @@ int servo_state_read(struct http_request *req)
     char                    *val;
     json_error_t            jerr;
 
+    ctx = (struct servo_context*)http_state_get(req);
+
     if (req->method != HTTP_METHOD_GET) {
-        kore_log(LOG_ERR, "%s: method '%s' is forbidden for item", 
-                 __FUNCTION__,
+        kore_log(LOG_ERR, "{%s} method %s is forbidden reading", 
+                 ctx->client,
                  http_method_text(req->method));
         return HTTP_STATE_ERROR;
     }
@@ -350,7 +372,6 @@ int servo_state_read(struct http_request *req)
     rows = 0;
     val = NULL;
 
-    ctx = (struct servo_context*)http_state_get(req);
     ctx->val_str = NULL;
     ctx->val_json = NULL;
     ctx->val_blob = NULL;

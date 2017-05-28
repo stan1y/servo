@@ -44,6 +44,10 @@ servo_delete_context(struct http_request *req)
     ctx = http_state_get(req);
     kore_pgsql_cleanup(&ctx->sql);
 
+    kore_log(LOG_NOTICE, "{%s} << close session, state: %s, sql: %s",
+                         ctx->client,
+                         servo_request_state(req),
+                         sql_state_text(ctx->sql.state));
     if (ctx->err != NULL)
         kore_free(ctx->err);
     if (ctx->client != NULL)
@@ -164,6 +168,7 @@ servo_init_context(struct servo_context *ctx)
         return (KORE_RESULT_ERROR);
     }
 
+    kore_log(LOG_NOTICE, "{%s} >> initialized session", ctx->client);
     return (KORE_RESULT_OK);
 }
 
@@ -194,13 +199,7 @@ servo_read_context_token(struct http_request *req)
     char                    *t, *token_hdr,
                             *hdr_parts[3];
     const char              *client_id;
-
-    ctx = http_state_get(req);
-    if (ctx->token != NULL || ctx->client != NULL) {
-        kore_log(LOG_ERR, "%s: trying to read non-empty context",
-                          __FUNCTION__);
-        return (KORE_RESULT_ERROR);
-    }
+    jwt_t                   *token;    
 
     if (!http_request_header(req, AUTH_HEADER, &t)) {
         return (KORE_RESULT_ERROR);
@@ -216,29 +215,35 @@ servo_read_context_token(struct http_request *req)
         return (KORE_RESULT_ERROR);
     }
     /* parse and verify json web token */
-    if (jwt_decode(&ctx->token, 
-                    hdr_parts[1],
-                    (const unsigned char *)CONFIG->jwt_key,
-                    CONFIG->jwt_key_len) != 0) {
+    if (jwt_decode(&token, 
+                   hdr_parts[1],
+                   (const unsigned char *)CONFIG->jwt_key,
+                   CONFIG->jwt_key_len) != 0) {
         kore_log(LOG_ERR, "%s: invalid json web token received: '%s'",
                  __FUNCTION__,
                  hdr_parts[1]);
         return (KORE_RESULT_ERROR);
     }
 
-    client_id = NULL;
-    client_id = jwt_get_grant(ctx->token, "id");
+    client_id = jwt_get_grant(token, "id");
     if (client_id == NULL) {
         kore_log(LOG_ERR, "%s: failed to get client id from token",
                  __FUNCTION__);
-        jwt_free(ctx->token);
-        ctx->token = NULL;
-        ctx->client = NULL;
         return (KORE_RESULT_ERROR);
     }
 
+    /* get and set http state from token */
+    ctx = (struct servo_context *)http_state_get(req);
+    if (ctx != NULL && (ctx->token != NULL || ctx->client != NULL)) {
+        kore_log(LOG_ERR, "{%s}: trying reset context with {%s}",
+                          ctx->client,
+                          client_id);
+        return (KORE_RESULT_ERROR);
+    }
+    ctx->token = token;
     ctx->client = kore_strdup(client_id);
-    kore_log(LOG_NOTICE, "existing client {%s}", ctx->client);
+
+    kore_log(LOG_NOTICE, "{%s} => existing session", ctx->client);
     return (KORE_RESULT_OK);
 }
 
@@ -272,7 +277,7 @@ servo_render_stats(struct http_request *req)
     servo_response_json(req, 200, stats);
     json_decref(stats);
     
-    kore_log(LOG_NOTICE, "rendering stats for {%s}", ctx->client);
+    kore_log(LOG_NOTICE, "{%s} return statistics", ctx->client);
     return rc;
 }
 
@@ -285,13 +290,19 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
     kore_pgsql_init(&ctx->sql);
     kore_pgsql_bind_request(&ctx->sql, req);
 
+    kore_log(LOG_DEBUG, "{%s} connecting, sql state: %s",
+                        ctx->client,
+                        sql_state_text(ctx->sql.state));
+
     if (!kore_pgsql_setup(&ctx->sql, DBNAME, KORE_PGSQL_ASYNC)) {
+        kore_pgsql_logerror(&ctx->sql);
 
         /* If the state was still INIT, we'll try again later. */
         if (ctx->sql.state == KORE_PGSQL_STATE_INIT) {
             req->fsm_state = retry_step;
-            kore_log(LOG_ERR, "retrying connection, sql state is '%s'",
-                sql_state_text(ctx->sql.state));
+            kore_log(LOG_ERR, "{%s} retrying connection, sql state: %s",
+                              ctx->client,
+                              sql_state_text(ctx->sql.state));
             return (HTTP_STATE_RETRY);
         }
 
@@ -299,13 +310,18 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
         kore_pgsql_logerror(&ctx->sql);
         ctx->status = 500;
         req->fsm_state = error_step;
-        kore_log(LOG_ERR, "%s: failed to connect to database, sql state is '%s'",
-            __FUNCTION__,
+        kore_log(LOG_ERR, "{%s} failed to connect to database, sql state: %s",
+            ctx->client,
             sql_state_text(ctx->sql.state));
         kore_log(LOG_NOTICE,
             "hint: check database connection string in the configuration file.");
     }
     else {
+        kore_log(LOG_DEBUG, "{%s} connected, state: %s, sql state: %s, next: %s",
+                            ctx->client,
+                            servo_state_text(req->fsm_state),
+                            sql_state_text(ctx->sql.state),
+                            servo_state_text(success_step));
         req->fsm_state = success_step;
     }
 
@@ -337,28 +353,43 @@ servo_wait(struct http_request *req, int read_step, int complete_step, int error
     switch (ctx->sql.state) {
     case KORE_PGSQL_STATE_WAIT:
         /* keep waiting */
-        kore_log(LOG_DEBUG, "io wating ~> %s", servo_request_state(req));
+        kore_log(LOG_DEBUG, "{%s} io wating, state: %s, sql: %s",
+                            ctx->client,
+                            servo_request_state(req),
+                            sql_state_text(ctx->sql.state));
         return (HTTP_STATE_RETRY);
 
     case KORE_PGSQL_STATE_COMPLETE:
         req->fsm_state = complete_step;
-        kore_log(LOG_DEBUG, "io complete ~> %s", servo_request_state(req));
+        kore_log(LOG_DEBUG, "{%s} io complete, state: %s, sql: %s",
+                            ctx->client,
+                            servo_request_state(req),
+                            sql_state_text(ctx->sql.state));
         break;
 
     case KORE_PGSQL_STATE_RESULT:
         req->fsm_state = read_step;
-        kore_log(LOG_DEBUG, "io reading ~> %s", servo_request_state(req));
+        kore_log(LOG_DEBUG, "{%s} io reading, state: %s, sql: %s",
+                            ctx->client,
+                            servo_request_state(req),
+                            sql_state_text(ctx->sql.state));
         break;
 
     case KORE_PGSQL_STATE_ERROR:
         req->fsm_state = error_step;
-        kore_log(LOG_ERR, "io failed ~> %s.\n%s",
+        kore_log(LOG_ERR, "{%s} io failed, state: %s, sql: %s, sql error: %s",
+            ctx->client,
             servo_request_state(req),
+            sql_state_text(ctx->sql.state),
             ctx->sql.error);
         servo_handle_pg_error(req);
         break;
 
     default:
+        // kore_log(LOG_DEBUG, "{%s} waiting for io... state: %s, sql: %s",
+        //                     ctx->client,
+        //                     servo_request_state(req),
+        //                     sql_state_text(ctx->sql.state));
         kore_pgsql_continue(&ctx->sql);
         break;
     }
@@ -376,29 +407,36 @@ int state_error(struct http_request *req)
     /* Handle redirect */
     if (servo_is_redirect(ctx)) {
         msg = http_status_text(ctx->status);
-        kore_log(LOG_DEBUG, "%d: %s ~> '%s' to {%s}", 
-            ctx->status,
-            msg,
-            req->path,
-            ctx->client);
-
         http_response(req, ctx->status, msg, sizeof(msg));
+        kore_log(LOG_DEBUG, "{%s} %s %s redirected with %d: %s",
+            ctx->client,
+            http_method_text(req->method),
+            req->path,
+            ctx->status,
+            msg);
         servo_delete_context(req);
         return (HTTP_STATE_COMPLETE);
     }
 
     if (servo_is_success(ctx)) {
         ctx->status = 500;
-        kore_log(LOG_DEBUG, "no error status set, default=500");
+        kore_log(LOG_DEBUG, "{%s} no error status set, default is 500",
+                            ctx->client);
     }
 
-    kore_log(LOG_ERR, "%d: %s, sql state: %s to {%s}", 
-        ctx->status, 
-        http_status_text(ctx->status), 
-        sql_state_text(ctx->sql.state),
-        ctx->client);
     servo_response_status(req, ctx->status, 
         ctx->err != NULL ? ctx->err : http_status_text(ctx->status));
+
+    kore_log(LOG_ERR, "{%s} sql state on error is %s", 
+        ctx->client, 
+        sql_state_text(ctx->sql.state));
+
+    kore_log(LOG_ERR, "{%s} %s %s failed with %d: %s",
+        ctx->client,
+        http_method_text(req->method),
+        req->path,
+        ctx->status,
+        http_status_text(ctx->status));
 
     servo_delete_context(req);
     return (HTTP_STATE_COMPLETE);
@@ -452,12 +490,6 @@ int state_done(struct http_request *req)
 
     }
     else if (servo_is_item_request(req)) {
-
-        kore_log(LOG_DEBUG, "serving item size %zu (%s) -> (%s) to {%s}",
-            ctx->val_sz,
-            SERVO_CONTENT_NAMES[ctx->in_content_type],
-            SERVO_CONTENT_NAMES[ctx->out_content_type],
-            ctx->client);
         
         switch(ctx->out_content_type) {
             default:
@@ -482,16 +514,24 @@ int state_done(struct http_request *req)
                 break;
 
         };
+
+        kore_log(LOG_DEBUG, "{%s} wrote %zu bytes, src type: %s, dst type: %s",
+                 ctx->client,
+                 ctx->val_sz,
+                 SERVO_CONTENT_NAMES[ctx->in_content_type],
+                 SERVO_CONTENT_NAMES[ctx->out_content_type]);
     }
     else {
         ctx->status = 403;
         http_response(req, ctx->status, "", 0);
     }
     
-    kore_log(LOG_DEBUG, "%d: %s to {%s}",
+    kore_log(LOG_DEBUG, "{%s} %s %s completed with %d: %s",
+        ctx->client,
+        http_method_text(req->method),
+        req->path,
         ctx->status,
-        http_status_text(ctx->status),
-        ctx->client);
+        http_status_text(ctx->status));
 
     servo_delete_context(req);
     return (HTTP_STATE_COMPLETE);
