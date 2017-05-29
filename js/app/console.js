@@ -60,6 +60,7 @@ $(document).ready(function() {
 			dataType = $("#data-type").val(),
 			method = $("input#method:checked").val(),
 			data = body.val(),
+			afile = $("#input#file").val(),
 			error = false;
 
 		reset();
@@ -80,6 +81,10 @@ $(document).ready(function() {
 
 		if (method == "GET" || method == "DELETE")
 			data = "";
+
+		if (afile != undefined) {
+			data = afile;
+		}
 
 		console.log("clientId=" + clientId);
 		console.log("itemKey=" + itemKey);

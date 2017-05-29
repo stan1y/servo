@@ -1,6 +1,7 @@
 'use strict';
 
 var servo = require('../lib/servo.js');
+var uuidV4 = require('uuid/v4');
 
 /*
   ======== A Handy Little Nodeunit Reference ========
@@ -23,8 +24,8 @@ var servo = require('../lib/servo.js');
 */
 
 var servoUrl = 'https://localhost:8080',
-  appId = 'the-app-id',
-  appKey = 'SuPeR$eCrEt',
+  appId = uuidV4(),
+  appKey = uuidV4(),
   authMode = 'HS512';
 
 
@@ -38,11 +39,6 @@ function sleep(ms) {
 }
 
 exports['servo_tests'] = {
-
-  setUp: function(done) {
-    // fixme: run servo instance here
-    done();
-  },
 
   constuct: function(test) {
     // empty ctor
@@ -73,24 +69,6 @@ exports['servo_tests'] = {
     test.done();
   },
 
-  post: function(test) {
-    var s = servo.Servo(servoUrl);
-
-    // post text
-    s.post('foo', {
-      type: 'text',
-      body: 'foo-foo',
-      success: function(body, req) {
-        test.equal(req.statusCode, 201);
-        test.done();
-      },
-      error: function(err) {
-        test.ok(false, 'post failed: ' + err);
-        test.done();
-      }
-    });
-  },
-
   /*defaults: function(test) {
     var s = servo.Servo(servoUrl);
     s.post('default-test', 'the-default-value');
@@ -113,39 +91,27 @@ exports['servo_tests'] = {
 
   },*/
 
-  post_get_file_multipart: function (test) {
-    var s = servo.Servo(servoUrl);
-    s.upload('test-upload', 'file.txt', {
-      success: function(body, req) {
-        test.equal(req.statusCode, 201, 'unexpected status on upload(post)');
-        test.done();
-      },
-      error: function(err) {
-        test.ok(false, 'upload failed: ' + err);
-        test.done();
-      }
-    });
-  },
-
   post_get_json: function(test) {
     var s = servo.Servo(servoUrl),
-        json_data = {a:1, b:2};
+        jsonData = {a:1, b:2},
+        jsonKey = 'test-json-' + uuidV4();
 
     // post with json
-    s.post('json-key', {
+    s.post(jsonKey, {
       type: 'json',
-      body: json_data,
+      body: jsonData,
       success: function(body, req) {
         test.equal(req.statusCode, 201, 'unexpected status on json post');
-        test.ok(s.authHeader != null, 'no auth header received');
+        test.ok(s.authHeader != null, 'no auth header received on json post');
 
-        s.get('json-key', {
+        s.get(jsonKey, {
           type: 'json',
           success: function(body, req) {
+            test.ok(s.authHeader != null, 'no auth header received on json get');
             test.equal(req.statusCode, 200, 'unexpected status on json get');
-            for(var k in json_data) {
-              test.equal(json_data[k], body[k], 'returned json does not match: '  
-                + json_data[k] + '!=' + body[k]);
+            for(var k in jsonData) {
+              test.equal(jsonData[k], body[k], 'returned json does not match: '  
+                + jsonData[k] + '!=' + body[k]);
             }
             test.done();  
           },
@@ -163,19 +129,21 @@ exports['servo_tests'] = {
   },
 
   post_get_text: function(test) {
-    var s = servo.Servo(servoUrl);
+    var s = servo.Servo(servoUrl),
+        textData = uuidV4(),
+        textKey = 'test-text-' + uuidV4();
     // post an item
-    s.post('bar', {
+    s.post(textKey, {
       type: 'text',
-      body: 'bar-bar',    
+      body: textData,    
       success: function(body, req) {
         test.equal(req.statusCode, 201, 'unexpected status on text post');
-        test.ok(s.authHeader != null, 'no auth header received');
+        test.ok(s.authHeader != null, 'no auth header received on text post');
 
-        s.get('bar', {
+        s.get(textKey, {
           success: function(body, req) {
             test.equal(req.statusCode, 200, 'unexpected status on text get');
-            test.equal(body, 'bar-bar', 'returned string does not match');
+            test.equal(body, textData, 'returned string does not match');
             test.done();
           },
           error: function(err, req) {
@@ -186,6 +154,37 @@ exports['servo_tests'] = {
       },
       error: function(err, req) {
         test.ok(false, 'post text failed: ' + err.message);
+        test.done();
+      }
+    });
+  },
+
+  post_get_file_multipart: function (test) {
+    var s = servo.Servo(servoUrl),
+        uploadKey = 'test-upload-' + uuidV4(),
+        testFileContent = 'abcdefghijhlmnopqrstuvwxyz';
+
+    s.upload(uploadKey, {
+      type: 'file',
+      body: 'testfile.txt',
+      success: function(body, req) {
+        test.equal(req.statusCode, 201, 'unexpected status on upload(post)');
+        s.get(uploadKey, {
+          type: 'text',
+          success: function(body, req) {
+            console.log("GOT " + body);
+            test.equal(body, testFileContent, 'uploaded content mismatch expected: ' +
+              body + ' != ' + testFileContent);
+            test.done();
+          },
+          error: function(err) {
+            test.ok(false, 'get after upload failed: ' + err);
+            test.done();
+          }
+        });
+      },
+      error: function(err) {
+        test.ok(false, 'upload failed: ' + err);
         test.done();
       }
     });

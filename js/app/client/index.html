@@ -153,7 +153,8 @@
 								class="form-control input-md">
 								<option value="text">Plain text</option>
 								<option value="json">JSON</option>
-								<option value="binary">Binary</option>
+								<option value="file">Multipart</option>
+								<option value="base64">Base64</option>
 							</select>
 							<span class="help-block">
 								Item content type.
@@ -170,6 +171,7 @@
 								rows=6
 								class="form-control"
 								readonly></textarea>
+							<input type="file" id="file" class="visible:hidden;" />
 							<span class="help-block">
 								Payload to be sent to Servo
 							</span>  

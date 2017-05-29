@@ -10,28 +10,42 @@
  * Licensed under the MIT license.
  */
 
-function isBrowser() {
-	try {
-		return this === window;
-	}
-	catch(e) {
-		return false;
-	}
-};
-
 (function(exports) {
 
 	'use strict';
 
+	/* Utilities */
+
+	function isBrowser() {
+		try {
+			return this === window;
+		}
+		catch(e) {
+			return false;
+		}
+	}
+
+	function toBuffer(ab) {
+		var buffer = new Buffer(ab.byteLength);
+		var view = new Uint8Array(ab);
+		for (var i = 0; i < buffer.length; ++i) {
+			buffer[i] = view[i];
+		}
+		return buffer;
+	}
+
+	/* Imports */
 	
 	if (isBrowser()) {
-		var request = require('browser-request');
+		var Request = require('browser-request');
 	}
 	else {
-		var request = require('request');
+		var Request = require('request');
 	}
-	var FormData = require('form-data'),
-		      fs = require('fs');
+	var FileSystem = require('fs'),
+		  FormData = require('form-data');
+
+	/* Servo client class */
 
 	function ServoClient(baseurl) {
 		this.baseurl = baseurl;
@@ -55,57 +69,19 @@ function isBrowser() {
 	}
 
 	ServoClient.prototype.do = function(method, key, opts) {
-		var headers = {},
-			form = new FormData(),
-			path = key.startsWith('/', key) ? key : ('/' + key),
-			uri = this.baseurl + path,
+		var path = key.startsWith('/', key) ? key : ('/' + key),
+			url = this.baseurl + path,
 			req = {
 				method: method,
-				uri: uri,
+				url: url,
 				rejectUnauthorized: false,
 				requestCert: true,
-				agent: false
+				agent: false,
+				headers: {}
 			},
 			self = this;
 
-		if (!this.authHeader && this.appid && this.appkey) {
-			this.authHeader = this.buildAuthHeader();
-		}
-		if (this.authHeader) {
-			headers['authorization'] = this.authHeader;
-		}
-
-		if (!opts.type || opts.type == 'text') {
-			headers['Content-Type'] = 'text/plain';
-			headers['Accept'] = 'text/plain';
-			if (opts.body) {
-				req['body'] = opts.body;
-			}
-		}
-		else if (opts.type == 'json') {
-			headers['Accept'] = 'application/json';
-			if (opts.body && typeof opts.body == 'object') {
-				headers['Content-Type'] = 'application/json';
-				req['body'] = JSON.stringify(opts.body);
-			}
-		}
-		else if (opts.type == 'form-data') {
-			headers['Accept'] = 'multipart/form-data';
-			if (opts.body && typeof opts.body == 'string') {
-				var stream = fs.createReadStream(opts.body);
-				headers['Content-Type'] = 'multipart/form-data';
-				headers['Content-Length'] = 'multipart/form-data';
-				form.append('file', stream);
-				req.form = form;
-			}
-		}
-		else {
-			throw 'Unknown type: ' + opts.type;
-		}
-
-		req.headers = headers;
-		
-		return request(req, function(err, xhr, body) {
+		var requestCallback = function(err, xhr, body) {
 			if (!self.authHeader) {
 				if (xhr && xhr.getResponseHeader)
 					self.authHeader = xhr.getResponseHeader('authorization');
@@ -113,11 +89,12 @@ function isBrowser() {
 					self.authHeader = xhr.headers['authorization'];
 			}
 
-			if (self.authHeader == undefined) {
+			if (!err && self.authHeader == undefined) {
 				throw 'No auth header assigned';
 			}
 			
-			if (headers['Accept'] == 'application/json' && body) {
+			// expected json ?
+			if (req.headers['Accept'] == 'application/json' && body) {
 				try { 
 					body = JSON.parse(body);
 				}
@@ -126,36 +103,71 @@ function isBrowser() {
 				}
 			}
 
+			// received an exception from servo ?
 			if (typeof body == 'object' && body.code && body.message) {
 				if (body.code != 200 && body.code != 201) {
-					err = 'servo error code: ' + body.code + ', ' + body.message;
+					err = 'Servo exception! ' + body.code + ': ' + body.message;
 				}
 			}
 
 			if (err && opts.error) {
-				console.log('error occured: ' + err);
-				opts.error.apply(this, [body, xhr]);
+				console.log('request failed:' + err);
+				opts.error.apply(this, [err]);
 			}
 			else if (opts.success) {
 				opts.success.apply(this, [body, xhr]);
 			}
-		});
-	}
+		};
 
-	ServoClient.prototype.upload = function(key, filename, opts) {
-		// file can be sent as base64 or form-data
-		if (typeof opts == 'string') {
-			opts = {
-				'type': opts
-			};
+		// prepare request object
+		if (this.authHeader) {
+			req.headers['Authorization'] = this.authHeader;
 		}
-		if (opts == undefined) {
-			opts = {
-				'type': 'form-data'
+
+		if (!opts.type || opts.type == 'text') {
+			req.headers['Content-Type'] = 'text/plain';
+			req.headers['Accept'] = 'text/plain';
+			if (opts.body) {
+				req.body = opts.body;
 			}
 		}
-		opts['body'] = filename;
-		return this.do('POST', key, opts);
+		else if (opts.type == 'json') {
+			req.headers['Accept'] = 'application/json';
+			if (opts.body && typeof opts.body == 'object') {
+				req.headers['Content-Type'] = 'application/json';
+				req.body = JSON.stringify(opts.body);
+			}
+		}
+		else if (opts.type == 'file') {
+			req.headers['Accept'] = 'multipart/form-data';
+			if (opts.body && typeof opts.body == 'string') {
+				req.headers['Content-Type'] = 'multipart/form-data';
+				req.formData = { file: FileSystem.createReadStream(opts.body) };
+			}
+		}
+		else {
+			throw 'Unknown type: ' + opts.type;
+		}
+
+		// make request with callback & request object
+		Request(req, requestCallback);
+	}
+
+	ServoClient.prototype.upload = function(key, opts) {
+		if (opts == undefined) {
+			throw 'No filename or options given to form-data POST.';
+		}
+		if (typeof opts == 'string') {
+			// opts are a filename 
+			return this.do('POST', key, {
+				'type': 'file',
+				'body': opts
+			});
+		}
+		if (typeof opts == 'object') {
+			return this.do('POST', key, opts);
+		}
+		throw 'Unexpected type of options argument.';
 	}
 
 	ServoClient.prototype.get = function(key, opts) {
