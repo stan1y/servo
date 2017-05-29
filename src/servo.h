@@ -139,5 +139,4 @@ int                      state_handle_put(struct http_request *, struct kore_buf
 int                      state_handle_delete(struct http_request *);
 int                      state_handle_head(struct http_request *);
 
-
 #endif //_SERVO_H_

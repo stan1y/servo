@@ -290,7 +290,7 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
     kore_pgsql_init(&ctx->sql);
     kore_pgsql_bind_request(&ctx->sql, req);
 
-    kore_log(LOG_DEBUG, "{%s} connecting, sql state: %s",
+    kore_log(LOG_DEBUG, "{%s} connecting, sql: %s",
                         ctx->client,
                         sql_state_text(ctx->sql.state));
 
@@ -300,7 +300,7 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
         /* If the state was still INIT, we'll try again later. */
         if (ctx->sql.state == KORE_PGSQL_STATE_INIT) {
             req->fsm_state = retry_step;
-            kore_log(LOG_ERR, "{%s} retrying connection, sql state: %s",
+            kore_log(LOG_ERR, "{%s} retrying connection, sql: %s",
                               ctx->client,
                               sql_state_text(ctx->sql.state));
             return (HTTP_STATE_RETRY);
@@ -310,14 +310,14 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
         kore_pgsql_logerror(&ctx->sql);
         ctx->status = 500;
         req->fsm_state = error_step;
-        kore_log(LOG_ERR, "{%s} failed to connect to database, sql state: %s",
+        kore_log(LOG_ERR, "{%s} failed to connect to database, sql: %s",
             ctx->client,
             sql_state_text(ctx->sql.state));
         kore_log(LOG_NOTICE,
             "hint: check database connection string in the configuration file.");
     }
     else {
-        kore_log(LOG_DEBUG, "{%s} connected, state: %s, sql state: %s, next: %s",
+        kore_log(LOG_DEBUG, "{%s} connected, state: %s, sql: %s, next: %s",
                             ctx->client,
                             servo_state_text(req->fsm_state),
                             sql_state_text(ctx->sql.state),

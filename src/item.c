@@ -2,6 +2,9 @@
 #include "util.h"
 #include "assets.h"
 
+int item_sql_update(const char*, struct http_request *, struct kore_buf *);
+int item_sql_query(const char*, struct http_request *);
+
 int
 servo_state_init(struct http_request *req)
 {
@@ -64,9 +67,6 @@ servo_state_init(struct http_request *req)
     // read & init content types
     servo_read_content_types(req);
 
-    // set Authorization header
-    servo_write_context_token(req);
-
     // set Access-Control-Allow-Origin header accoring to config
     if (CONFIG->allow_origin != NULL) {
         http_response_header(req, CORS_ALLOWORIGIN_HEADER, CONFIG->allow_origin);
@@ -98,7 +98,9 @@ servo_state_init(struct http_request *req)
     // set Access-Control-Expose-Headers to allow auth header
     // as indicated by Access-Control-Allow-Headers
     http_response_header(req, CORS_EXPOSE_HEADER, AUTH_HEADER);
-    
+
+    // set Authorization header
+    servo_write_context_token(req);
 
     // render stats for client bootstrap
     if (!servo_is_item_request(req)) {
@@ -119,17 +121,17 @@ servo_state_init(struct http_request *req)
                             REQ_STATE_ERROR);
 }
 
-int state_handle_get(struct http_request *req)
+int item_sql_query(const char *asset, struct http_request *req)
 {
-    /* get_item.sql
-     * $1 - client
-     * $2 - item key 
-     */
+    /*
+        call SQL script [asset] with arguments in order:
+        (client, key)
+    */
     struct servo_context    *ctx;
 
     ctx = (struct servo_context*)http_state_get(req);
     return kore_pgsql_query_params(&ctx->sql, 
-                                (const char*)asset_get_item_sql, 
+                                asset, 
                                 PGSQL_FORMAT_TEXT,
                                 2,
                                 // client
@@ -142,10 +144,11 @@ int state_handle_get(struct http_request *req)
                                 PGSQL_FORMAT_TEXT);
 }
 
-int state_handle_post(struct http_request *req, struct kore_buf *body)
+int item_sql_update(const char* asset, struct http_request *req, struct kore_buf *body)
 {
-    /* post_item.sql expects 5 arguments: 
-     client, key, string, json, blob
+    /*
+        call SQL script [asset] with arguments in order:
+        (client, key, string, json, blob)
     */
     struct servo_context    *ctx;
     int                      rc;
@@ -167,7 +170,7 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
         case SERVO_CONTENT_STRING:
             val_str = kore_buf_stringify(body, NULL);
             rc = kore_pgsql_query_params(&ctx->sql, 
-                                (const char*)asset_post_item_sql, 
+                                asset, 
                                 PGSQL_FORMAT_TEXT,
                                 5,
                                 // client
@@ -207,7 +210,7 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
                 return (KORE_RESULT_ERROR);
             }
             rc = kore_pgsql_query_params(&ctx->sql, 
-                                (const char*)asset_post_item_sql, 
+                                asset, 
                                 PGSQL_FORMAT_TEXT,
                                 5,
                                 // client
@@ -233,7 +236,7 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
         case SERVO_CONTENT_FORMDATA:
             val_blob = kore_buf_stringify(body, &val_blob_sz);
             rc = kore_pgsql_query_params(&ctx->sql, 
-                                (const char*)asset_post_item_sql, 
+                                asset, 
                                 PGSQL_FORMAT_TEXT,
                                 5,
                                 // client
@@ -257,6 +260,40 @@ int state_handle_post(struct http_request *req, struct kore_buf *body)
             break;
     }
     return rc;
+}
+
+int state_handle_get(struct http_request *req)
+{
+    /* get_item.sql
+     * $1 - client
+     * $2 - item key 
+     */
+    return item_sql_query((const char*)asset_get_item_sql, req);
+}
+
+int state_handle_delete(struct http_request *req)
+{
+    /* delete_item.sql
+     * $1 - client
+     * $2 - item key 
+     */
+    return item_sql_query((const char*)asset_delete_item_sql, req);
+}
+
+int state_handle_put(struct http_request *req, struct kore_buf *body)
+{
+    /* put_item.sql expects 5 arguments: 
+     client, key, string, json, blob
+    */
+    return item_sql_update((const char*)asset_put_item_sql, req, body);
+}
+
+int state_handle_post(struct http_request *req, struct kore_buf *body)
+{
+    /* post_item.sql expects 5 arguments: 
+     client, key, string, json, blob
+    */
+    return item_sql_update((const char*)asset_post_item_sql, req, body);
 }
 
 int
@@ -309,9 +346,11 @@ servo_state_query(struct http_request *req)
             break;
 
         case HTTP_METHOD_PUT:
+            rc = state_handle_put(req, body);
             break;
 
         case HTTP_METHOD_DELETE:
+            rc = state_handle_delete(req);
             break;
 
         default:
