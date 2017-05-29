@@ -33,6 +33,10 @@ var sleepFor = function(duration) {
     while(new Date().getTime() < now + duration) {} 
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 exports['servo_tests'] = {
 
   setUp: function(done) {
@@ -88,16 +92,17 @@ exports['servo_tests'] = {
   },
 
   /*defaults: function(test) {
-    test.done();
-
-    
     var s = servo.Servo(servoUrl);
     s.post('default-test', 'the-default-value');
+    sleepFor(1000);
+    console.log(s);
     s.put('default-test', 'modified-value');
+    sleepFor(1000);
+    console.log(s);
     s.get('default-test', {
       success: function(body, req) {
-        test.equal(req.statusCode, 200, "unexpected response on get");
-        test.equal(body, 'modified-value', 'unpexpected value returned');
+        test.equal(req.statusCode, 200, 'unexpected status in get default');
+        test.equal(body, 'modified-value', 'unpexpected value returned in get default');
         test.done(); 
       },
       error: function(err) {
@@ -105,13 +110,14 @@ exports['servo_tests'] = {
         test.done(); 
       }
     });
+
   },*/
 
-  upload_file: function (test) {
+  post_get_file_multipart: function (test) {
     var s = servo.Servo(servoUrl);
     s.upload('test-upload', 'file.txt', {
       success: function(body, req) {
-        test.equal(req.statusCode, 201, "unexpected response on upload(post)");
+        test.equal(req.statusCode, 201, 'unexpected status on upload(post)');
         test.done();
       },
       error: function(err) {
@@ -130,13 +136,13 @@ exports['servo_tests'] = {
       type: 'json',
       body: json_data,
       success: function(body, req) {
-        test.equal(req.statusCode, 201, "unexpected response on post");
-        test.ok(s.authHeader != null, "no auth header received");
+        test.equal(req.statusCode, 201, 'unexpected status on json post');
+        test.ok(s.authHeader != null, 'no auth header received');
 
         s.get('json-key', {
           type: 'json',
           success: function(body, req) {
-            test.equal(req.statusCode, 200, "unexpected response on get");
+            test.equal(req.statusCode, 200, 'unexpected status on json get');
             for(var k in json_data) {
               test.equal(json_data[k], body[k], 'returned json does not match: '  
                 + json_data[k] + '!=' + body[k]);
@@ -144,42 +150,42 @@ exports['servo_tests'] = {
             test.done();  
           },
           error: function(err) {
-            test.ok(false, "get failed:" + err.message);
+            test.ok(false, 'json get failed:' + err.message);
           }
         });
         test.done();
       },
       error: function(err) {
-        test.ok(false, 'post failed: ' + err.message);
+        test.ok(false, 'json post failed: ' + err.message);
         test.done();
       }
     });
   },
 
-  post_get: function(test) {
+  post_get_text: function(test) {
     var s = servo.Servo(servoUrl);
     // post an item
     s.post('bar', {
       type: 'text',
       body: 'bar-bar',    
       success: function(body, req) {
-        test.equal(req.statusCode, 201, "unexpected response on post");
-        test.ok(s.authHeader != null, "no auth header received");
+        test.equal(req.statusCode, 201, 'unexpected status on text post');
+        test.ok(s.authHeader != null, 'no auth header received');
 
         s.get('bar', {
           success: function(body, req) {
-            test.equal(req.statusCode, 200, "unexpected response on get");
+            test.equal(req.statusCode, 200, 'unexpected status on text get');
             test.equal(body, 'bar-bar', 'returned string does not match');
             test.done();
           },
           error: function(err, req) {
-            test.ok(false, 'get failed: ' + err.message);
+            test.ok(false, 'get text failed: ' + err.message);
             test.done();
           }
         });
       },
       error: function(err, req) {
-        test.ok(false, 'post failed: ' + err.message);
+        test.ok(false, 'post text failed: ' + err.message);
         test.done();
       }
     });

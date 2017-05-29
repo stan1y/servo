@@ -57,7 +57,7 @@ function isBrowser() {
 	ServoClient.prototype.do = function(method, key, opts) {
 		var headers = {},
 			form = new FormData(),
-			path = key.startsWith("/", key) ? key : ("/" + key),
+			path = key.startsWith('/', key) ? key : ('/' + key),
 			uri = this.baseurl + path,
 			req = {
 				method: method,
@@ -100,23 +100,29 @@ function isBrowser() {
 			}
 		}
 		else {
-			throw "Unknown type: " + opts.type;
+			throw 'Unknown type: ' + opts.type;
 		}
+
 		req.headers = headers;
 		
-		request(req, function(err, xhr, body) {
-			if (!self.authHeader)
+		return request(req, function(err, xhr, body) {
+			if (!self.authHeader) {
 				if (xhr && xhr.getResponseHeader)
-					self.authHeader = xhr.getResponseHeader("authorization");
+					self.authHeader = xhr.getResponseHeader('authorization');
 				if (xhr && xhr.headers)
-					self.authHeader = xhr.headers["authorization"];
+					self.authHeader = xhr.headers['authorization'];
+			}
+
+			if (self.authHeader == undefined) {
+				throw 'No auth header assigned';
+			}
 			
 			if (headers['Accept'] == 'application/json' && body) {
 				try { 
 					body = JSON.parse(body);
 				}
 				catch(e) {
-					body = {code: 0, message: "invalid json: " + e };
+					body = {code: 0, message: 'invalid json: ' + e };
 				}
 			}
 
@@ -138,7 +144,7 @@ function isBrowser() {
 
 	ServoClient.prototype.upload = function(key, filename, opts) {
 		// file can be sent as base64 or form-data
-		if (typeof opts == "string") {
+		if (typeof opts == 'string') {
 			opts = {
 				'type': opts
 			};
@@ -153,33 +159,42 @@ function isBrowser() {
 	}
 
 	ServoClient.prototype.get = function(key, opts) {
-		return this.do('GET', key, opts || {});
+		if (opts == undefined || typeof opts != 'object') {
+			throw 'No options given or options type is incorrect.';
+		}
+		return this.do('GET', key, opts);
 	}
 
 	ServoClient.prototype.post = function(key, opts) {
 		if (opts == undefined) {
-			throw "No body or options given to post.";
+			throw 'No body or options given to POST.';
 		}
-		if (typeof opts == "string") {
-			opts = {
-				'body': opts,
-				'type': 'text'
-			};
+		if (typeof opts == 'string') {
+			return this.do('POST', key, {
+				body: opts,
+				type: 'text'
+			});
 		}
-		return this.do('POST', key, opts);
+		if (typeof opts == 'object') {
+			return this.do('POST', key, opts);
+		}
+		throw 'Unexpected type of options argument.';
 	}
 
 	ServoClient.prototype.put = function(key, opts) {
 		if (opts == undefined) {
-			throw "No body or options given to put.";
+			throw 'No body or options given to PUT.';
 		}
-		if (typeof opts == "string") {
-			opts = {
+		if (typeof opts == 'string') {
+			return this.do('PUT', key, {
 				'body': opts,
 				'type': 'text'
-			};
+			});
 		}
-		return this.do('PUT', key, opts);
+		if (typeof opts == 'object') {
+			return this.do('PUT', key, opts);
+		}
+		throw 'Unexpected type of options argument.';
 	}
 
 	ServoClient.prototype.delete = function(key) {
