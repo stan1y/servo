@@ -1,24 +1,15 @@
-language: c
-sudo: false
-dist: trusty
-compiler:
-  - clang
-  - gcc
+sudo: required
+language: node_js
+services:
+  - docker
 
 before_install:
-  - wget www.endlessinsomnia.com/kore_2.1.dev1_amd64.deb
-  - sudo dpkg -i kore_2.1.dev1_amd64.deb
+  - npm install -g grunt
+  - npm install
+  - docker pull ubuntu/16.04
+  - docker build -t kore -f kore/Dockerfile kore/
+  - docker build -t servo Dockerfile .
+  - docker run -p 8080:8080 -t servo kodev run
 
-addons:
-  apt:
-    sources:
-      - sourceline: 'ppa:jonathonf/python-3.6'
-    packages:
-      - libssl
-      - libssl-dev
-      - libpq
-      - libpq-dev
-      - python3.6
-      - python3.6-dev
 script:
-  - make
+  cd js && grunt nodeunit
