@@ -4,3 +4,6 @@
 [submodule "lib/kore"]
 	path = lib/kore
 	url = git@github.com:stan1y/kore.git
+[submodule "kore"]
+	path = kore
+	url = git@github.com:stan1y/kore.git
