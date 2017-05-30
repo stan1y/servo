@@ -1,9 +1,9 @@
-[submodule "lib/jansson"]
-	path = lib/jansson
-	url = git@github.com:stan1y/jansson.git
-[submodule "lib/kore"]
-	path = lib/kore
-	url = git@github.com:stan1y/kore.git
 [submodule "kore"]
 	path = kore
 	url = git@github.com:stan1y/kore.git
+[submodule "jansson"]
+	path = jansson
+	url = git@github.com:akheron/jansson.git
+[submodule "libjwt"]
+	path = libjwt
+	url = git@github.com:benmcollins/libjwt.git
