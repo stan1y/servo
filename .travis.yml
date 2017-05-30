@@ -12,9 +12,13 @@ before_install:
 addons:
   apt:
     sources:
-      - deadsnakes
+      - sourceline: 'ppa:jonathonf/python-3.6'
     packages:
+      - libssl
       - libssl-dev
+      - libpq
+      - libpq-dev
+      - python3.6
       - python3.6-dev
 script:
   - make
