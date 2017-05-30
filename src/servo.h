@@ -6,7 +6,7 @@
 #include <kore/pgsql.h>
 
 #include <uuid/uuid.h>
-#include <jwt/jwt.h>
+#include <jwt.h>
 #include <jansson.h>
 
 /* States */
