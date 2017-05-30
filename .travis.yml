@@ -4,7 +4,7 @@ services:
   - docker
 
 before_install:
-  - docker pull ubuntu/16.04
+  - docker pull ubuntu:16.04
   - docker build -t kore -f kore/Dockerfile kore/
   - docker build -t servo Dockerfile .
   - docker run -p 8080:8080 -t servo kodev run
