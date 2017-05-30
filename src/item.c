@@ -2,7 +2,7 @@
 #include "util.h"
 #include "assets.h"
 
-int item_sql_update(const char*, struct http_request *, struct kore_buf *);
+int item_sql_update(const char*, struct http_request *, struct kore_buf *, struct http_file *);
 int item_sql_query(const char*, struct http_request *);
 
 int
@@ -144,7 +144,7 @@ int item_sql_query(const char *asset, struct http_request *req)
                                 PGSQL_FORMAT_TEXT);
 }
 
-int item_sql_update(const char* asset, struct http_request *req, struct kore_buf *body)
+int item_sql_update(const char* asset, struct http_request *req, struct kore_buf *body, struct http_file* file)
 {
     /*
         call SQL script [asset] with arguments in order:
@@ -155,19 +155,38 @@ int item_sql_update(const char* asset, struct http_request *req, struct kore_buf
     char                    *val_str;
     json_error_t             jerr;
     json_t                  *val_json;
-    void                    *val_blob;
-    size_t                   val_blob_sz;
+    struct kore_buf         *val_bin_buf;
+    void                    *val_bin;
+    size_t                   val_bin_sz;
 
     rc = KORE_RESULT_OK;
     ctx = (struct servo_context*)http_state_get(req);
-    kore_log(LOG_NOTICE, "{%s} read %zu bytes (%s)",
-        ctx->client,
-        body->offset,
-        SERVO_CONTENT_NAMES[ctx->in_content_type]);
+    if (body != NULL) {
+        kore_log(LOG_NOTICE, "{%s} reading body %zu bytes (%s) from client",
+            ctx->client,
+            body->offset,
+            SERVO_CONTENT_NAMES[ctx->in_content_type]);
+    }
+    else if (file != NULL) {
+        kore_log(LOG_NOTICE, "{%s} reading file %zu bytes (%s) from client",
+            ctx->client,
+            file->length,
+            SERVO_CONTENT_NAMES[ctx->in_content_type]);   
+    }
+    else {
+        kore_log(LOG_ERR, "{%s} no data from client",
+                          ctx->client);
+        return (KORE_RESULT_ERROR);
+    }
 
     switch(ctx->in_content_type) {
         default:
         case SERVO_CONTENT_STRING:
+            if (body == NULL) {
+                kore_log(LOG_ERR, "{%s} no string data in request body",
+                          ctx->client);
+                return (KORE_RESULT_ERROR);
+            }
             val_str = kore_buf_stringify(body, NULL);
             rc = kore_pgsql_query_params(&ctx->sql, 
                                 asset, 
@@ -188,12 +207,17 @@ int item_sql_update(const char* asset, struct http_request *req, struct kore_buf
                                 // json
                                 NULL, 0,
                                 PGSQL_FORMAT_TEXT,
-                                // blog
+                                // binary
                                 NULL, 0,
                                 PGSQL_FORMAT_TEXT);
             break;
 
         case SERVO_CONTENT_JSON:
+            if (body == NULL) {
+                kore_log(LOG_ERR, "{%s} no json data in request body",
+                          ctx->client);
+                return (KORE_RESULT_ERROR);
+            }
             val_str = kore_buf_stringify(body, NULL);
             val_json = json_loads(val_str, JSON_ALLOW_NUL, &jerr);
             if (val_json == NULL) {
@@ -222,19 +246,29 @@ int item_sql_update(const char* asset, struct http_request *req, struct kore_buf
                                 strlen(req->path),
                                 PGSQL_FORMAT_TEXT,
                                 // string
-                                NULL,
-                                0,
+                                NULL, 0,
                                 PGSQL_FORMAT_TEXT, 
                                 // json
                                 val_str, strlen(val_str),
                                 PGSQL_FORMAT_TEXT,
-                                // blog
+                                // binary
                                 NULL, 0,
                                 PGSQL_FORMAT_TEXT);
             break;
 
         case SERVO_CONTENT_FORMDATA:
-            val_blob = kore_buf_stringify(body, &val_blob_sz);
+            if (file == NULL) {
+                kore_log(LOG_ERR, "{%s} no file data in multipart request",
+                          ctx->client);
+                return (KORE_RESULT_ERROR);
+            }
+            val_bin_buf = servo_read_file(file);
+            if (val_bin_buf == NULL) {
+                kore_log(LOG_ERR, "{%s} failed to read file contents",
+                          ctx->client);
+                return (KORE_RESULT_ERROR);
+            }
+            val_bin = kore_buf_stringify(val_bin_buf, &val_bin_sz);
             rc = kore_pgsql_query_params(&ctx->sql, 
                                 asset, 
                                 PGSQL_FORMAT_TEXT,
@@ -248,15 +282,16 @@ int item_sql_update(const char* asset, struct http_request *req, struct kore_buf
                                 strlen(req->path),
                                 PGSQL_FORMAT_TEXT,
                                 // string
-                                NULL,
-                                0,
+                                NULL, 0,
                                 PGSQL_FORMAT_TEXT, 
                                 // json
                                 NULL, 0,
                                 PGSQL_FORMAT_TEXT,
-                                // blog
-                                val_blob, val_blob_sz,
+                                // binary
+                                val_bin,
+                                val_bin_sz,
                                 PGSQL_FORMAT_TEXT);
+            kore_buf_free(val_bin_buf);
             break;
     }
     return rc;
@@ -280,59 +315,95 @@ int state_handle_delete(struct http_request *req)
     return item_sql_query((const char*)asset_delete_item_sql, req);
 }
 
-int state_handle_put(struct http_request *req, struct kore_buf *body)
+int state_handle_put(struct http_request *req, struct kore_buf *body, struct http_file *file)
 {
     /* put_item.sql expects 5 arguments: 
      client, key, string, json, blob
     */
-    return item_sql_update((const char*)asset_put_item_sql, req, body);
+    return item_sql_update((const char*)asset_put_item_sql, req, body, file);
 }
 
-int state_handle_post(struct http_request *req, struct kore_buf *body)
+int state_handle_post(struct http_request *req, struct kore_buf *body, struct http_file *file)
 {
     /* post_item.sql expects 5 arguments: 
      client, key, string, json, blob
     */
-    return item_sql_update((const char*)asset_post_item_sql, req, body);
+    return item_sql_update((const char*)asset_post_item_sql, req, body, file);
 }
 
 int
 servo_state_query(struct http_request *req)
 {
     int                      rc, too_big;
-    struct servo_context    *ctx;
-    struct kore_buf         *body;
+    struct servo_context    *ctx = NULL;
+    struct kore_buf         *body = NULL;
+    struct http_file        *file = NULL;
+    size_t limit                  = 0;
 
     rc = KORE_RESULT_OK;
     ctx = (struct servo_context*)http_state_get(req);
 
-    kore_log(LOG_DEBUG, "{%s} quering item with key '%s'",
-                        ctx->client,
-                        req->path);
-    body = servo_request_data(req);
-
-    /* Check size limitations */
+    /* Check size limitations for body & multipart */
     too_big = 0;
-    switch(ctx->in_content_type) {
-        default:
-        case SERVO_CONTENT_STRING:
-            if (body->offset > CONFIG->string_size) {
-                too_big = 1;
-            }
-            break;
-        case SERVO_CONTENT_JSON:
-            if (body->offset > CONFIG->json_size) {
-                too_big = 1;
-            }
-            break;
-        case SERVO_CONTENT_FORMDATA:
-            if (body->offset > CONFIG->blob_size) {
-                too_big = 1;
-            }
-            break;
-    };
+    if (req->method == HTTP_METHOD_POST ||
+        req->method == HTTP_METHOD_PUT) {
+        
+        switch(ctx->in_content_type) {
+            /* Read request body */
+            default:
+            case SERVO_CONTENT_STRING:
+            case SERVO_CONTENT_JSON:
+                body = servo_read_body(req);
+                if (body == NULL) {
+                    kore_log(LOG_ERR, "{%s} no request body to handle",
+                                      ctx->client);
+                    ctx->status = 400;
+                    ctx->err = kore_strdup("No request body to handle");
+                    req->fsm_state = REQ_STATE_ERROR;
+                    return (HTTP_STATE_CONTINUE);
+                }
+                if (ctx->in_content_type == SERVO_CONTENT_STRING)
+                    limit = CONFIG->string_size;
+                if (ctx->in_content_type == SERVO_CONTENT_JSON)
+                    limit = CONFIG->json_size;
+
+                if (body->offset > limit) {
+                    kore_log(LOG_ERR, "{%s} body size is too large. %lu > %lu",
+                                      ctx->client,
+                                      body->offset,
+                                      limit);
+                    too_big = 1;
+                }
+                break;
+
+            /* Read multipart form data */
+            case SERVO_CONTENT_FORMDATA:
+                http_populate_multipart_form(req);
+                file = http_file_lookup(req, "file");
+                if (file == NULL) {
+                    kore_log(LOG_ERR, "{%s} no 'file' parameter sent in the form data.",
+                                      ctx->client);
+                    ctx->status = 400;
+                    ctx->err = kore_strdup("No 'file' parameter given in multipart/form-data content.");
+                    req->fsm_state = REQ_STATE_ERROR;
+                    return (HTTP_STATE_CONTINUE);
+                }
+                if (file->length > CONFIG->blob_size) {
+                    kore_log(LOG_ERR, "{%s} file size is too large. %lu > %lu",
+                                      ctx->client,
+                                      file->length,
+                                      CONFIG->blob_size);
+                    too_big = 1;
+                }
+                break;
+        };
+    }
+
+    /* Size limitations */
     if (too_big) {
-        kore_buf_free(body);
+        kore_log(LOG_ERR, "{%s} request forbidden.",
+                          ctx->client);
+        if (body != NULL) kore_buf_free(body);
         ctx->status = 403;
         ctx->err = kore_strdup("Request is too large");
         req->fsm_state = REQ_STATE_ERROR;
@@ -342,11 +413,13 @@ servo_state_query(struct http_request *req)
     /* Handle item operation in http method */
     switch(req->method) {
         case HTTP_METHOD_POST:
-            rc = state_handle_post(req, body);
+            rc = state_handle_post(req, body, file);
+            if (body != NULL) kore_buf_free(body);
             break;
 
         case HTTP_METHOD_PUT:
-            rc = state_handle_put(req, body);
+            rc = state_handle_put(req, body, file);
+            if (body != NULL) kore_buf_free(body);
             break;
 
         case HTTP_METHOD_DELETE:
@@ -358,7 +431,6 @@ servo_state_query(struct http_request *req)
             rc = state_handle_get(req);
             break;
     }
-    kore_buf_free(body);
 
     if (rc != KORE_RESULT_OK) {
         /* go to error handler
@@ -382,7 +454,7 @@ servo_state_query(struct http_request *req)
                         servo_state_text(REQ_STATE_WAIT));
     /* Wait for IO request completition */    
     req->fsm_state = REQ_STATE_WAIT;
-    return HTTP_STATE_CONTINUE;
+    return (HTTP_STATE_CONTINUE);
 }
 
 int servo_state_wait(struct http_request *req)
@@ -402,9 +474,10 @@ int servo_state_read(struct http_request *req)
     ctx = (struct servo_context*)http_state_get(req);
 
     if (req->method != HTTP_METHOD_GET) {
-        kore_log(LOG_ERR, "{%s} method %s is forbidden reading", 
+        kore_log(LOG_ERR, "{%s} %s %s is forbidden", 
                  ctx->client,
-                 http_method_text(req->method));
+                 http_method_text(req->method),
+                 req->path);
         return HTTP_STATE_ERROR;
     }
 
@@ -413,13 +486,15 @@ int servo_state_read(struct http_request *req)
 
     ctx->val_str = NULL;
     ctx->val_json = NULL;
-    ctx->val_blob = NULL;
+    ctx->val_bin = NULL;
     ctx->val_sz = 0;
 
     rows = kore_pgsql_ntuples(&ctx->sql);
     if (rows == 0) {
         /* item was not found, report 404 */
-        kore_log(LOG_DEBUG, "zero row selected for key \"%s\"", req->path);
+        kore_log(LOG_DEBUG, "{%s} nothing selected for key '%s'",
+                            ctx->client,
+                            req->path);
         ctx->status = 404;
         req->fsm_state = REQ_STATE_ERROR;
         return HTTP_STATE_CONTINUE;
@@ -434,18 +509,19 @@ int servo_state_read(struct http_request *req)
 
         val = kore_pgsql_getvalue(&ctx->sql, 0, 1);
         if (val != NULL && strlen(val) > 0) {
-            kore_log(LOG_NOTICE, "parsing stored json data: \"%s\"", val);
             ctx->val_json = json_loads(val, JSON_ALLOW_NUL, &jerr);
             if (ctx->val_json == NULL) {
-                kore_log(LOG_ERR, "malformed json received from store");
+                kore_log(LOG_ERR, "{%s} malformed json read from database for key '%s'",
+                                  ctx->client,
+                                  req->path);
                 return (HTTP_STATE_ERROR);
             }
             ctx->val_sz = strlen(val);
         }
         val = kore_pgsql_getvalue(&ctx->sql, 0, 2);
         if (val != NULL && strlen(val) > 0) {
-            ctx->val_blob = kore_strdup(val);
-            ctx->val_sz = strlen(ctx->val_blob);
+            ctx->val_bin = kore_strdup(val);
+            ctx->val_sz = strlen(ctx->val_bin);
         }
 
         /* since we've read item, update in_content_type
@@ -455,13 +531,14 @@ int servo_state_read(struct http_request *req)
             ctx->in_content_type = SERVO_CONTENT_STRING;
         if (ctx->val_json != NULL)
             ctx->in_content_type = SERVO_CONTENT_JSON;
-        if (ctx->val_blob != NULL)
+        if (ctx->val_bin != NULL)
             ctx->in_content_type = SERVO_CONTENT_FORMDATA;
     }
     else {
-        kore_log(LOG_ERR, "%s: selected %d rows, 1 expected",
-            __FUNCTION__,
-            rows);
+        kore_log(LOG_ERR, "{%s} selected %d rows for key '%s', but 1 expected",
+            ctx->client,
+            rows,
+            req->path);
         return (HTTP_STATE_ERROR);  
     }
 

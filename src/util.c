@@ -186,7 +186,7 @@ servo_response_status(struct http_request *req,
 }
 
 struct kore_buf *
-servo_request_data(struct http_request *req)
+servo_read_file(struct http_file *file)
 {
     struct kore_buf     *buf;
     int                  r;
@@ -194,7 +194,29 @@ servo_request_data(struct http_request *req)
 
 
     buf = kore_buf_alloc(http_body_max);
+    for (;;) {
+        r = http_file_read(file, data, sizeof(data));
+        if (r == -1) {
+            kore_buf_free(buf);
+            return NULL;
+        }
+        if (r == 0)
+            break;
+        kore_buf_append(buf, data, r);
+    }
 
+    return buf;
+}
+
+struct kore_buf *
+servo_read_body(struct http_request *req)
+{
+    struct kore_buf     *buf;
+    int                  r;
+    char                 data[BUFSIZ];
+
+
+    buf = kore_buf_alloc(http_body_max);
     for (;;) {
         r = http_body_read(req, data, sizeof(data));
         if (r == -1) {
@@ -311,7 +333,7 @@ servo_item_to_string(struct servo_context *ctx)
         case SERVO_CONTENT_JSON:
             return json_dumps(ctx->val_json, JSON_INDENT(2));
         case SERVO_CONTENT_FORMDATA:
-            kore_base64_encode(ctx->val_blob, ctx->val_sz, &b64);
+            kore_base64_encode(ctx->val_bin, ctx->val_sz, &b64);
             return b64;
     }
 

@@ -56,8 +56,8 @@ servo_delete_context(struct http_request *req)
         kore_free(ctx->val_str);
     if (ctx->val_json != NULL)
         json_decref(ctx->val_json);
-    if (ctx->val_blob != NULL)
-        kore_free(ctx->val_blob);
+    if (ctx->val_bin != NULL)
+        kore_free(ctx->val_bin);
     if (ctx->token)
         jwt_free(ctx->token);
     
@@ -129,7 +129,7 @@ servo_init_context(struct servo_context *ctx)
     ctx->val_sz = 0;
     ctx->val_str = NULL;
     ctx->val_json = NULL;
-    ctx->val_blob = NULL;
+    ctx->val_bin = NULL;
 
     /* read and write strings by default */
     ctx->in_content_type = SERVO_CONTENT_STRING;
@@ -243,7 +243,7 @@ servo_read_context_token(struct http_request *req)
     ctx->token = token;
     ctx->client = kore_strdup(client_id);
 
-    kore_log(LOG_NOTICE, "{%s} => existing session", ctx->client);
+    kore_log(LOG_NOTICE, "{%s} >> existing session", ctx->client);
     return (KORE_RESULT_OK);
 }
 
@@ -277,7 +277,7 @@ servo_render_stats(struct http_request *req)
     servo_response_json(req, 200, stats);
     json_decref(stats);
     
-    kore_log(LOG_NOTICE, "{%s} return statistics", ctx->client);
+    kore_log(LOG_NOTICE, "{%s} render stats", ctx->client);
     return rc;
 }
 
@@ -452,21 +452,6 @@ int state_done(struct http_request *req)
     if (req->method == HTTP_METHOD_POST ||
         req->method == HTTP_METHOD_PUT) 
     {
-        switch(ctx->out_content_type) {
-            case SERVO_CONTENT_STRING:
-                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_STRING);
-                break;
-            case SERVO_CONTENT_JSON:
-                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_JSON);
-                break;
-            case SERVO_CONTENT_FORMDATA:
-                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_FORMDATA);
-                break;
-            case SERVO_CONTENT_BASE64:
-                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_JSON);
-                break;
-
-        }
         /* reply 201 Created on POSTs */
         if (req->method == HTTP_METHOD_POST)
             ctx->status = 201;
@@ -474,23 +459,26 @@ int state_done(struct http_request *req)
         output = http_status_text(ctx->status);
         switch(ctx->out_content_type) {
             default:
-            case SERVO_CONTENT_FORMDATA:
-                break;
-
             case SERVO_CONTENT_STRING:
+                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_STRING);
                 http_response(req, ctx->status,
                               output,
                               strlen(output));
                 break;
+
             case SERVO_CONTENT_JSON:
+            case SERVO_CONTENT_FORMDATA:
                 servo_response_status(req, ctx->status,
-                                     output);
+                                      output);
                 break;
         }
-
+        kore_log(LOG_DEBUG, "{%s} saved item %zu bytes, type: %s",
+                 ctx->client,
+                 ctx->val_sz,
+                 SERVO_CONTENT_NAMES[ctx->in_content_type]);
     }
     else if (servo_is_item_request(req)) {
-        
+
         switch(ctx->out_content_type) {
             default:
             case SERVO_CONTENT_STRING:
@@ -510,12 +498,13 @@ int state_done(struct http_request *req)
                 break;
 
             case SERVO_CONTENT_FORMDATA:
+                http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_FORMDATA);
                 servo_response_status(req, 403, http_status_text(403));
                 break;
 
         };
 
-        kore_log(LOG_DEBUG, "{%s} wrote %zu bytes, src type: %s, dst type: %s",
+        kore_log(LOG_DEBUG, "{%s} wrote item %zu bytes, src type: %s, dst type: %s",
                  ctx->client,
                  ctx->val_sz,
                  SERVO_CONTENT_NAMES[ctx->in_content_type],

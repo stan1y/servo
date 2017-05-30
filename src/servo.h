@@ -110,7 +110,7 @@ struct servo_context {
     // Current item data
     char                *val_str;
     json_t              *val_json;
-    void                *val_blob;
+    void                *val_bin;
     size_t               val_sz;
 };
 
@@ -134,8 +134,8 @@ int                      state_error(struct http_request *);
 int                      state_done(struct http_request *);
 
 int                      state_handle_get(struct http_request *);
-int                      state_handle_post(struct http_request *, struct kore_buf *);
-int                      state_handle_put(struct http_request *, struct kore_buf *);
+int                      state_handle_post(struct http_request *, struct kore_buf *, struct http_file *);
+int                      state_handle_put(struct http_request *, struct kore_buf *, struct http_file *);
 int                      state_handle_delete(struct http_request *);
 int                      state_handle_head(struct http_request *);
 

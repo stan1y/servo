@@ -24,7 +24,8 @@
 int                  servo_read_config(struct servo_config *);
 
 int                  servo_is_item_request(struct http_request *);
-struct kore_buf     *servo_request_data(struct http_request *);
+struct kore_buf     *servo_read_body(struct http_request *);
+struct kore_buf     *servo_read_file(struct http_file *);
 void                 servo_read_content_types(struct http_request *);
 
 void                 servo_response_json(struct http_request *,
