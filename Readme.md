@@ -56,6 +56,7 @@ To run locally, or run
 
 To install globally to `PREFIX` specified at build.
 
+
 ### Configuration
 
 To configure a fresh installation of Servo run the following tools:
@@ -63,6 +64,17 @@ To configure a fresh installation of Servo run the following tools:
      $ sudo tools/configure
 
 This will drop and create a new fresh database.
+
+
+### Javascript Client Library
+
+The use of Servo app from Javascript environemnt is pretty straight-forward with any modern framework or library such as JQuery. However it requires certain repetition of common features on client side of Servo prototcol. In order to provide an example of Servo API usage and speed up addoptation in static web sites, there is a Grunt-based Javascript Library in `js` folder.
+
+
+### Console App
+
+There is a separate Node.JS based console application witch illustrates usage of Servo JS client library and CORS features of Servo. The app located in `js/app` folder and uses Grunt for build and distribution together with JS library itself.
+
 
 ### Query Data
 
