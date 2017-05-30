@@ -2,9 +2,6 @@
 database = host=localhost dbname=servodb user=servo password=test
 public_mode = 1
 
-[filter]
-ip_address = 127.0.0.1
-
 [session]
 ttl = 300
 string_size = 255
