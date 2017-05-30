@@ -15,6 +15,18 @@ struct http_state   servo_session_states[] = {
     { "REQ_STATE_DONE",       state_done  },
 };
 
+static char* DBNAME = "servo-store";
+static char    *SQL_STATE_NAMES[] = {
+    "<null>",   // NULL
+    "init",     // KORE_PGSQL_STATE_INIT
+    "wait",     // KORE_PGSQL_STATE_WAIT
+    "result",   // KORE_PGSQL_STATE_RESULT
+    "error",    // KORE_PGSQL_STATE_ERROR
+    "done",     // KORE_PGSQL_STATE_DONE
+    "complete"  // KORE_PGSQL_STATE_COMPLETE
+};
+
+
 #define servo_session_states_size (sizeof(servo_session_states) \
     / sizeof(servo_session_states[0]))
 

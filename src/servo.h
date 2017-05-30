@@ -55,18 +55,6 @@ static char    *SERVO_CONTENT_NAMES[] = {
 #define SERVO_CONTENT_BASE64    3
 #define SERVO_CONTENT_HTML      4
 
-static char* DBNAME = "servo-store";
-
-static char    *SQL_STATE_NAMES[] = {
-    "<null>",   // NULL
-    "init",     // KORE_PGSQL_STATE_INIT
-    "wait",     // KORE_PGSQL_STATE_WAIT
-    "result",   // KORE_PGSQL_STATE_RESULT
-    "error",    // KORE_PGSQL_STATE_ERROR
-    "done",     // KORE_PGSQL_STATE_DONE
-    "complete"  // KORE_PGSQL_STATE_COMPLETE
-};
-
 struct servo_config {
 
     char        *database;
