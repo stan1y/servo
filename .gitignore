@@ -1,6 +1,10 @@
 *.swp
 *.o
 *.pem
+servo.config
+servo.creator
+servo.includes
+servo.files
 .flavor
 .objs
 servo.so
