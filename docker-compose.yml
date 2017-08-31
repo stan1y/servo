@@ -27,8 +27,9 @@ services:
     image: servo-console:latest
     tty: true
     volumes:
-      - ./js:/src/servo-console
-    working_dir: /src/servo-console
+      - ./js:/src/servo/js
+      - /src/servo/js/node_modules
+    working_dir: /src/servo/js
     command: node app/index.js
     ports:
       - 5000:5000

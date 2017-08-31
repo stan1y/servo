@@ -1,4 +1,4 @@
-### Javascription client library and debugging console for Servo session engine.
+### JavaScript client library and debugging console for Servo session engine.
 
 ```javascript
 var servo = require('servo'),
