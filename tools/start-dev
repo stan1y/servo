@@ -1,7 +1,0 @@
-#!/bin/bash
-DIR="$( dirname "${BASH_SOURCE[0]}" )"
-SERVO="${DIR}/.."
-KORE="/usr/local/bin/kore"
-
-cd $SERVO
-ls -d ./src/* ./assets/* | entr -r sh -c "$KORE clean && $KORE run"

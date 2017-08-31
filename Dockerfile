@@ -12,19 +12,16 @@ RUN apt-get install -y \
 	pkg-config \
 	uuid-dev
 
-RUN mkdir -p /usr/local/src/servo
-COPY .  /src/servo
-WORKDIR /src/servo
+COPY jansson /src/jansson
+WORKDIR /src/jansson
+RUN cmake . && make && make install
 
-RUN cd jansson && cmake . && make && make install
-RUN cd libjwt && autoreconf -i && ./configure && make && make install
+COPY libjwt /src/libjwt
+WORKDIR /src/libjwt
+RUN autoreconf -i && ./configure && make && make install
 
 RUN echo /usr/local/lib > /etc/ld.so.conf.d/usr-local-lib.conf
 RUN ldconfig
 
-
-RUN kodev flavor prod
-RUN kodev build
-
 RUN mkdir -p /usr/local/servo/conf
-COPY ./config.default /usr/local/servo/conf/servo.conf
+COPY ./config.docker /usr/local/servo/conf/servo.conf

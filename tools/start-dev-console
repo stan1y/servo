@@ -1,7 +1,0 @@
-#!/bin/bash
-DIR="$( dirname "${BASH_SOURCE[0]}" )"
-JSROOT="${DIR}/../js"
-NODE=`which node`
-
-cd $JSROOT
-ls -d ./app/*/* | entr -r sh -c "$NODE app/index.js"

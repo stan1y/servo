@@ -1,7 +1,3 @@
-create database servodb encoding 'UTF8';
-
-\connect servodb;
-
 create table item (
 	key			varchar(255),
 	client		varchar(36),
@@ -20,7 +16,3 @@ begin
 	return query select i.str_val, i.json_val, i.blob_val from item i where i.key = k and i.client = c;
 end;
 $$ language plpgsql;
-
-
-create user servo with password 'test';
-grant all privileges on table item to servo;

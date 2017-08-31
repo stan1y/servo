@@ -1,0 +1,47 @@
+version: "3.0"
+
+services:
+  kore:
+    build: ./kore
+    image: kore:latest
+
+  servo:
+    depends_on:
+      - postgresql
+    build: .
+    image: servo:latest
+    command: kodev run
+    env_file: ./secrets.env
+    volumes:
+      - .:/src/servo
+    working_dir: /src/servo
+    ports:
+      - 8080:8080
+    expose:
+      - 8080
+
+  console:
+    depends_on:
+      - servo
+    build: ./js
+    image: servo-console:latest
+    tty: true
+    volumes:
+      - ./js:/src/servo-console
+    working_dir: /src/servo-console
+    command: node app/index.js
+    ports:
+      - 5000:5000
+
+  postgresql:
+    restart: always
+    image: sameersbn/postgresql:9.6-2
+    expose:
+      - 5432
+    env_file: ./secrets.env
+    volumes:
+      - postgresql-db:/var/lib/postgresql
+
+volumes:
+  postgresql-db:
+    driver: local
