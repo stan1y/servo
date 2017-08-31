@@ -43,9 +43,12 @@ char                 *servo_item_to_json(struct servo_context *);
 char                 *servo_random_string(char *, size_t);
 char                 *servo_format_date(time_t*);
 
-const char           *servo_state_text(int s);
-const char           *sql_state_text(int s);
+const char           *servo_state_text(int);
+const char           *sql_state_text(int);
 const char           *servo_request_state(struct http_request *);
+
+int                   servo_test_db(void);
+int                   servo_recreate_db(void);
 
 int                   servo_connect_db(struct http_request *, int, int, int);
 int                   servo_wait(struct http_request *, int, int, int);

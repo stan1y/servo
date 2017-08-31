@@ -7,7 +7,7 @@ S_SRC=	$(wildcard src/*.c)
 $(SERVO): $(S_SRC)
 	$(KORE) build
 
-all: $(SERVO)
+build: $(SERVO)
 
 install:
 	./tools/install
@@ -18,4 +18,6 @@ configure:
 clean:
 	$(KORE) clean
 
-.PHONY: all clean
+default: build
+
+.PHONY: install configure clean

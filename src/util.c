@@ -38,40 +38,40 @@ static int servo_read_config_handler(void* user, const char* section, const char
         cfg->jwt_key_len = strlen(value);
     } else if (MATCH("auth", "alg")) {
         if (strcmp(value, "HS256")) {
-            cfg->jwt_alg = JWT_ALG_HS256;            
+            cfg->jwt_alg = JWT_ALG_HS256;
         }
         else if (strcmp(value, "HS384")) {
-            cfg->jwt_alg = JWT_ALG_HS384;            
+            cfg->jwt_alg = JWT_ALG_HS384;
         }
         else if (strcmp(value, "HS512")) {
-            cfg->jwt_alg = JWT_ALG_HS512;            
+            cfg->jwt_alg = JWT_ALG_HS512;
         }
         else if (strcmp(value, "RS256")) {
-            cfg->jwt_alg = JWT_ALG_RS256;            
+            cfg->jwt_alg = JWT_ALG_RS256;
         }
         else if (strcmp(value, "RS384")) {
-            cfg->jwt_alg = JWT_ALG_RS384;            
+            cfg->jwt_alg = JWT_ALG_RS384;
         }
         else if (strcmp(value, "RS512")) {
-            cfg->jwt_alg = JWT_ALG_RS512;            
+            cfg->jwt_alg = JWT_ALG_RS512;
         }
         else if (strcmp(value, "ES256")) {
-            cfg->jwt_alg = JWT_ALG_ES256;            
+            cfg->jwt_alg = JWT_ALG_ES256;
         }
         else if (strcmp(value, "ES384")) {
-            cfg->jwt_alg = JWT_ALG_ES384;            
+            cfg->jwt_alg = JWT_ALG_ES384;
         }
         else if (strcmp(value, "ES512")) {
-            cfg->jwt_alg = JWT_ALG_ES512;            
+            cfg->jwt_alg = JWT_ALG_ES512;
         }
         else if (strcmp(value, "TERM")) {
-            cfg->jwt_alg = JWT_ALG_TERM;            
+            cfg->jwt_alg = JWT_ALG_TERM;
         }
         else if (strcmp(value, "none")) {
-            cfg->jwt_alg = JWT_ALG_NONE;           
+            cfg->jwt_alg = JWT_ALG_NONE;
         }
         else {
-            kore_log(LOG_ERR, "unknown auth algorithm: %s", 
+            kore_log(LOG_ERR, "unknown auth algorithm: %s",
                               value);
         }
     } else {
@@ -101,14 +101,14 @@ servo_parse_config(const char* path, struct servo_config *cfg)
 
 int servo_read_config(struct servo_config *cfg)
 {
-    
+
     char                *p, *path;
     char                 home[PATH_MAX], prefix[PATH_MAX];
     char                *homevar;
     struct kore_buf     *buf;
     int                  parsed;
     size_t               i;
-    
+
     parsed = 0;
     /* $HOME defaults to "." */
     homevar = getenv("HOME");
@@ -127,7 +127,7 @@ int servo_read_config(struct servo_config *cfg)
 
     for(i = 0; i < servo_config_paths_size; ++i) {
         p = servo_config_paths[i];
-        
+
         /* read config paths and replace supported variables:
          * $HOME => env variable
          * $PREFIX => "-DPREFIX" value or "/usr/local/servo" default
@@ -179,7 +179,7 @@ servo_response_status(struct http_request *req,
 			const char* msg)
 {
     json_t* data;
-    
+
     data = json_pack("{s:i s:s}", "code", http_code, "message", msg);
     servo_response_json(req, http_code, data);
     json_decref(data);
@@ -345,4 +345,43 @@ servo_item_to_json(struct servo_context *ctx)
 {
     /* FIXME: apply json selectors here */
     return servo_item_to_string(ctx);
+}
+
+int
+servo_test_db(void)
+{
+  struct kore_pgsql sql;
+
+  kore_pgsql_init(&sql);
+  if (!kore_pgsql_setup(&sql, DBNAME, KORE_PGSQL_SYNC)) {
+		kore_pgsql_logerror(&sql);
+		return (KORE_RESULT_ERROR);
+	}
+
+  if (!kore_pgsql_query(&sql, "select key, client, last_read, last_write, str_val, json_val, blob_val from item limit 1")) {
+		return (KORE_RESULT_ERROR);
+	}
+
+  kore_pgsql_cleanup(&sql);
+  return (KORE_RESULT_OK);
+}
+
+int
+servo_recreate_db(void)
+{
+  struct kore_pgsql sql;
+
+  kore_pgsql_init(&sql);
+  if (!kore_pgsql_setup(&sql, DBNAME, KORE_PGSQL_SYNC)) {
+		kore_pgsql_logerror(&sql);
+		return (KORE_RESULT_ERROR);
+	}
+
+  if (!kore_pgsql_query(&sql, (const char *)asset_create_db_sql)) {
+		kore_pgsql_logerror(&sql);
+		return (KORE_RESULT_ERROR);
+	}
+
+  kore_pgsql_cleanup(&sql);
+  return (KORE_RESULT_OK);
 }

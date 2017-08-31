@@ -3,7 +3,6 @@
 #include "assets.h"
 
 struct servo_config *CONFIG;
-
 struct http_state   servo_session_states[] = {
 
     { "REQ_STATE_INIT",       servo_state_init  },
@@ -15,8 +14,7 @@ struct http_state   servo_session_states[] = {
     { "REQ_STATE_DONE",       state_done  },
 };
 
-static char* DBNAME = "servo-store";
-static char    *SQL_STATE_NAMES[] = {
+char* SQL_STATE_NAMES[] = {
     "<null>",   // NULL
     "init",     // KORE_PGSQL_STATE_INIT
     "wait",     // KORE_PGSQL_STATE_WAIT
@@ -26,19 +24,30 @@ static char    *SQL_STATE_NAMES[] = {
     "complete"  // KORE_PGSQL_STATE_COMPLETE
 };
 
+char* SERVO_CONTENT_NAMES[] = {
+    CONTENT_TYPE_STRING,
+    CONTENT_TYPE_JSON,
+    CONTENT_TYPE_FORMDATA,
+    CONTENT_TYPE_BASE64,
+    CONTENT_TYPE_HTML
+};
+
+char* DBNAME = "servo-store";
+
+/* Utilities */
 
 #define servo_session_states_size (sizeof(servo_session_states) \
     / sizeof(servo_session_states[0]))
 
 const char *
-servo_state_text(int s) 
+servo_state_text(int s)
 {
     return servo_session_states[s].name;
 }
 
 const char *
 sql_state_text(int s)
-{   
+{
     return SQL_STATE_NAMES[s];
 }
 
@@ -72,7 +81,7 @@ servo_delete_context(struct http_request *req)
         kore_free(ctx->val_bin);
     if (ctx->token)
         jwt_free(ctx->token);
-    
+
     http_state_cleanup(req);
 }
 
@@ -122,9 +131,17 @@ servo_init(int state)
         kore_log(LOG_NOTICE, "  allow origin: %s", CONFIG->allow_origin);
     if (CONFIG->allow_ipaddr != NULL)
         kore_log(LOG_NOTICE, "  allow ip address: %s", CONFIG->allow_ipaddr);
-    
+
     kore_pgsql_register(DBNAME, CONFIG->database);
-    
+
+    if (servo_test_db() != KORE_RESULT_OK ) {
+      kore_log(LOG_NOTICE, "initializing database...");
+      if (servo_recreate_db() != KORE_RESULT_OK) {
+        kore_log(LOG_ERR, "failed to setup database");
+        return (KORE_RESULT_ERROR);
+      }
+    }
+
     return (KORE_RESULT_OK);
 }
 
@@ -161,7 +178,7 @@ servo_init_context(struct servo_context *ctx)
     }
 
     if (CONFIG->jwt_alg != JWT_ALG_NONE)
-        if (jwt_set_alg(ctx->token, 
+        if (jwt_set_alg(ctx->token,
                         CONFIG->jwt_alg,
                         (const unsigned char *)CONFIG->jwt_key,
                          CONFIG->jwt_key_len) != 0) {
@@ -211,7 +228,7 @@ servo_read_context_token(struct http_request *req)
     char                    *t, *token_hdr,
                             *hdr_parts[3];
     const char              *client_id;
-    jwt_t                   *token;    
+    jwt_t                   *token;
 
     if (!http_request_header(req, AUTH_HEADER, &t)) {
         return (KORE_RESULT_ERROR);
@@ -227,7 +244,7 @@ servo_read_context_token(struct http_request *req)
         return (KORE_RESULT_ERROR);
     }
     /* parse and verify json web token */
-    if (jwt_decode(&token, 
+    if (jwt_decode(&token,
                    hdr_parts[1],
                    (const unsigned char *)CONFIG->jwt_key,
                    CONFIG->jwt_key_len) != 0) {
@@ -259,7 +276,7 @@ servo_read_context_token(struct http_request *req)
     return (KORE_RESULT_OK);
 }
 
-int 
+int
 servo_start(struct http_request *req)
 {
     if (!http_state_exists(req)) {
@@ -280,7 +297,7 @@ servo_render_stats(struct http_request *req)
     ctx = (struct servo_context *)http_state_get(req);
     // FIXME: real stats here
     last_read = time(NULL);
-    last_write = time(NULL);    
+    last_write = time(NULL);
     stats = json_pack("{s:s s:s s:s s:i}",
               "client",      ctx->client,
               "last_read",   servo_format_date(&last_read),
@@ -288,7 +305,7 @@ servo_render_stats(struct http_request *req)
               "session_ttl", CONFIG->session_ttl);
     servo_response_json(req, 200, stats);
     json_decref(stats);
-    
+
     kore_log(LOG_NOTICE, "{%s} render stats", ctx->client);
     return rc;
 }
@@ -297,7 +314,7 @@ int
 servo_connect_db(struct http_request *req, int retry_step, int success_step, int error_step)
 {
     struct servo_context    *ctx = http_state_get(req);
-    
+
     kore_pgsql_cleanup(&ctx->sql);
     kore_pgsql_init(&ctx->sql);
     kore_pgsql_bind_request(&ctx->sql, req);
@@ -340,7 +357,7 @@ servo_connect_db(struct http_request *req, int retry_step, int success_step, int
     return (HTTP_STATE_CONTINUE);
 }
 
-void 
+void
 servo_handle_pg_error(struct http_request *req)
 {
     struct servo_context *ctx = http_state_get(req);
@@ -436,11 +453,11 @@ int state_error(struct http_request *req)
                             ctx->client);
     }
 
-    servo_response_status(req, ctx->status, 
+    servo_response_status(req, ctx->status,
         ctx->err != NULL ? ctx->err : http_status_text(ctx->status));
 
-    kore_log(LOG_ERR, "{%s} sql state on error is %s", 
-        ctx->client, 
+    kore_log(LOG_ERR, "{%s} sql state on error is %s",
+        ctx->client,
         sql_state_text(ctx->sql.state));
 
     kore_log(LOG_ERR, "{%s} %s %s failed with %d: %s",
@@ -462,7 +479,7 @@ int state_done(struct http_request *req)
 
     ctx->status = 200;
     if (req->method == HTTP_METHOD_POST ||
-        req->method == HTTP_METHOD_PUT) 
+        req->method == HTTP_METHOD_PUT)
     {
         /* reply 201 Created on POSTs */
         if (req->method == HTTP_METHOD_POST)
@@ -496,7 +513,7 @@ int state_done(struct http_request *req)
             case SERVO_CONTENT_STRING:
                 output = servo_item_to_string(ctx);
                 http_response_header(req, CONTENT_TYPE_HEADER, CONTENT_TYPE_STRING);
-                http_response(req, ctx->status, 
+                http_response(req, ctx->status,
                               output == NULL ? "" : output,
                               output == NULL ? 0 : strlen(output));
                 break;
@@ -526,7 +543,7 @@ int state_done(struct http_request *req)
         ctx->status = 403;
         http_response(req, ctx->status, "", 0);
     }
-    
+
     kore_log(LOG_DEBUG, "{%s} %s %s completed with %d: %s",
         ctx->client,
         http_method_text(req->method),

@@ -41,13 +41,9 @@
 #define CONTENT_TYPE_BASE64     "application/base64"
 #define CONTENT_TYPE_HTML       "text/html"
 
-static char    *SERVO_CONTENT_NAMES[] = {
-    CONTENT_TYPE_STRING,
-    CONTENT_TYPE_JSON,
-    CONTENT_TYPE_FORMDATA,
-    CONTENT_TYPE_BASE64,
-    CONTENT_TYPE_HTML
-};
+extern char* SERVO_CONTENT_NAMES[];
+extern char* SQL_STATE_NAMES[];
+extern char* DBNAME;
 
 #define SERVO_CONTENT_STRING    0
 #define SERVO_CONTENT_JSON      1
@@ -79,7 +75,7 @@ struct servo_config {
 extern struct servo_config *CONFIG;
 
 struct servo_context {
-    // processing status 
+    // processing status
     // & err message
     int                  status;
     char                *err;
