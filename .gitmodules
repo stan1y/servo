@@ -1,9 +1,1 @@
-[submodule "kore"]
-	path = kore
-	url = https://github.com/stan1y/kore.git
-[submodule "jansson"]
-	path = jansson
-	url = https://github.com/akheron/jansson.git
-[submodule "libjwt"]
-	path = libjwt
-	url = https://github.com/benmcollins/libjwt.git
+
