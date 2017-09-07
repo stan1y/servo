@@ -58,7 +58,7 @@ async def init_db(app):
         log.debug('found items table with %d records' % count)
 
     except Exception as ex:
-        log.debug('database verification failed with %s, initializing...' % ex.message)
+        log.info('initialing database...')
         await servo.db.init(app['database'])
 
 def create_app(cfg):
