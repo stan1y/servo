@@ -1,5 +1,6 @@
 import os
 import sys
+import daemon
 import argparse
 import aiohttp
 import aiohttp.web
@@ -59,16 +60,30 @@ def main():
         prog='servo',
         description='Servo engine command line interface',
     )
-    parser.add_argument('--debug', default=False, action="store_true",
+    parser.add_argument('-D', '--daemon', default=False, action='store_true',
+                        help='Execute servo in daemon context and '
+                             'detach command line process.')
+    parser.add_argument('--debug', default=False, action='store_true',
                         help='Enable debug mode')
-    parser.add_argument('--ssl', default=False, action="store_true",
-                        help='Enable SSL endpoint')
     parser.add_argument('--config',
-                        help='Path to configuration file to use')
+                        help='Path to configuration file to use, otherwise '
+                             'use ~/.servo/conf or /etc/servo/conf.')
 
     args = parser.parse_args()
     configure_log(args)
 
+    if not args.daemon:
+        servo_entry(args)
+        sys.exit(0)
+
+    with daemon.DaemonContext():
+        servo_entry(args)
+    print('detached daemon')
+    sys.exit(0)
+
+
+def servo_entry(args):
+    '''Create and run Servo application'''
     try:
         cfg = load_config(args)
         servo_app = servo.web.create_app(cfg)
