@@ -14,4 +14,4 @@ RUN pip install -r requirements.txt
 RUN flake8 ./src/servo
 RUN python setup.py develop
 RUN mkdir -p /etc/servo
-RUN cp ./config /etc/servo/conf
+RUN cp ./config.default /etc/servo/conf

@@ -1,2 +1,4 @@
 aiopg>=0.13
 aiohttp>=2.2.0
+jwt>=0.5.2
+flake8>=3.4.1
