@@ -14,11 +14,12 @@ log = logging.getLogger(__name__)
 
 @servo.auth.authenticate
 async def stats(req):
+    ctx = req['context']
     return aiohttp.web.json_response({
-        'client': req['servo']['client'],
+        'client': ctx['token']['id'],
+        'session_ttl': ctx['token']['ttl'],
         'last_read': datetime.datetime.now().isoformat(),
-        'last_write': datetime.datetime.now().isoformat(),
-        'session_ttl': req.app['config'].get('session', 'ttl', fallback=300)
+        'last_write': datetime.datetime.now().isoformat()
     })
 
 
