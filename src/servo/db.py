@@ -5,9 +5,7 @@ import aiopg
 import aiohttp.web
 import base64
 
-
 log = logging.getLogger(__name__)
-
 
 # Load sql files on start
 here = os.path.abspath(os.path.dirname(__file__))

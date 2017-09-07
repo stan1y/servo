@@ -5,6 +5,7 @@ import jwt
 import uuid
 import aiohttp.web
 
+import servo
 import servo.err
 
 
@@ -19,30 +20,64 @@ def load_key(pem_file):
     raise servo.err.ConfigurationError("Failed to load JWT key")
 
 
+def content_type_to_servo(ctype):
+    if 'text/plain' in ctype:
+        return servo.TYPE_STRING
+    if 'application/json' in ctype:
+        return servo.TYPE_JSON
+    if 'multipart/form-data' in ctype:
+        return servo.TYPE_BLOB
+    if 'text/html' in ctype:
+        return servo.TYPE_HTML
+    return None
+
+
+def read_out_type(req):
+    '''Read accept headers and convert to servo item type'''
+    accepts = req.headers.getall('accept', ['text/plain'])
+    for ctype in accepts:
+        stype = content_type_to_servo(ctype)
+        if stype:
+            return stype
+    log.error('unsupported accepted types: %s' % (
+        ', '.join(accepts)))
+    raise aiohttp.web.HTTPBadRequest()
+
+
+def read_in_type(req):
+    '''Read content-type headers and convert to servo item type'''
+    types = req.headers.getall('content-type', ['text/plain'])
+    for ctype in types:
+        stype = content_type_to_servo(ctype)
+        if stype:
+            return stype
+    log.error('unsupported content types: %s' % (
+        ', '.join(types)))
+    raise aiohttp.web.HTTPBadRequest()
+
+
 def read_context_token(req):
-    '''Read authentication header, parse JWT and setup context'''
-    auth = req.headers.get('authentication')
+    '''Read authorization header, parse JWT and setup context'''
+    auth = req.headers.get('authorization')
     if not auth:
         return None
 
     scheme, token = auth.split(' ')
     if scheme.lower() != 'bearer':
-        log.error('unexpected authentication scheme: %s' % scheme)
+        log.error('unexpected authorization scheme "%s"' % scheme)
         raise aiohttp.web.HttpProcessingError(scheme)
 
     pub_key = req.app['jwt_public_key']
-    req['context']['token'] = jwt.JWT().decode(token,
-                                               pub_key)
-    log.info('{%s} using existing session' % req['context']['token']['id'])
+    return jwt.JWT().decode(token, pub_key)
 
 
 def write_context_token(req, resp):
-    '''Write context token to authentication header'''
+    '''Write context token to authorization header'''
     priv_key = req.app['jwt_private_key']
     alg = req.app['config'].get('jwt', 'alg', fallback='RS256')
     headers = {'iss': req.headers.get('host')}
-    resp.headers['authentication'] = jwt.JWT().encode(req['context']['token'],
-                                                      priv_key, alg, headers)
+    resp.headers['authorization'] = jwt.JWT().encode(req['context']['token'],
+                                                     priv_key, alg, headers)
 
 
 def init_context(req):
@@ -50,13 +85,14 @@ def init_context(req):
         'id': str(uuid.uuid4()),
         'ttl': req.app['config'].get('session', 'ttl', fallback=300)
     }
-    log.info('{%s} created new session' % req['context']['token']['id'])
+    log.debug('{%s} allocated new client session' %
+              req['context']['token']['id'])
 
 
 def authenticate(func):
     @functools.wraps(func)
     async def context_creator(req):
-        '''Creates authentication context by checking or emitting jwt'''
+        '''Creates authorization context by checking or emitting jwt'''
         public_mode = req.app['config'].getboolean('servo', 'public_mode',
                                                    fallback=True)
         allow_origin = req.app['config'].get('filter', 'origin', fallback=None)
@@ -76,13 +112,13 @@ def authenticate(func):
                     log.error('forbid client ip "%s"' % peer_ip)
                     raise aiohttp.web.HTTPForbidden()
 
-        # read or initialize authentication context
+        # read or initialize authorization context
         req['context'] = {
-            'token': None,
-            'in_content_type': 'text/plain',
-            'out_content_type': 'text/plain'
+            'token': read_context_token(req),
+            'in_content_type': read_in_type(req),
+            'out_content_type': read_out_type(req)
         }
-        if not read_context_token(req):
+        if not req['context']['token']:
             init_context(req)
 
         # log call into request handler

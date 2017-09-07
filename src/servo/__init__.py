@@ -12,6 +12,11 @@ import servo.err
 
 _config_paths = ['$HOME/.servo/conf', '/etc/servo/conf']
 
+# Servo Item Types
+TYPE_STRING = 1
+TYPE_JSON = 2
+TYPE_BLOB = 3
+TYPE_HTML = 4
 
 log = logging.getLogger(__name__)
 
