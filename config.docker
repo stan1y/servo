@@ -1,9 +1,0 @@
-[servo]
-database = host=postgresql dbname=servodb user=servo password=test
-public_mode = 1
-
-[session]
-ttl = 300
-string_size = 255
-json_size = 1024
-blob_size = 4096

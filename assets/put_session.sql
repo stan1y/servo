@@ -1,1 +1,0 @@
-insert into session values ($1, to_timestamp($2) AT TIME ZONE 'UTC')
