@@ -58,10 +58,17 @@ def authenticate(func):
         if not read_context_token(req):
             init_context(req)
 
-        log.info('{%(client)s} %(method)s %(path)s started' % {
+        log.info('{%(client)s} >> %(method)s %(path)s started' % {
             'client': req['context']['token']['id'],
             'method': req.method,
             'path': req.rel_url
         })
-        return await func(req)
+        resp = await func(req)
+        log.info("{%(client)s} << %(method)s %(path)s completed => %(s)d" % {
+            'client': req['context']['token']['id'],
+            'method': req.method,
+            'path': req.rel_url,
+            's': resp.status
+        })
+        return resp
     return context_creator

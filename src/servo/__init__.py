@@ -60,5 +60,5 @@ def main():
         host=cfg['servo']['listen'],
         port=int(cfg['servo']['port']),
         ssl_context=servo.web.create_ssl_context(cfg),
-        access_log=logging.getLogger('servo.access') if args.debug else None,
+        access_log=None,
     )
