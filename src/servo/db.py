@@ -1,6 +1,5 @@
 import os
 import logging
-import asyncio
 import aiopg
 
 
@@ -16,15 +15,13 @@ async def create_pool(cfg):
         dbname = os.environ.get('DB_NAME')
 
         if dbhost and dbuser and dbpass and dbname:
-            dsn = 'host=%(dbhost)s dbname=%(dbname)s user=%(dbuser)s password=%(dbpass)s' % {
-                'dbhost': dbhost,
-                'dbuser': dbuser,
-                'dbpass': dbpass,
-                'dbname': dbname,
+            dsn = 'host=%(h)s dbname=%(n)s ''user=%(u)s password=%(p)s' % {
+                'h': dbhost, 'n': dbuser,
+                'p': dbpass, 'u': dbname,
             }
 
     if not dsn:
-        raise Exception('No dababase connection details found in configuration.')
+        raise Exception('No dababase connection details in configuration.')
 
     log.debug('connecting...')
     return await aiopg.create_pool(dsn)

@@ -1,4 +1,3 @@
-import json
 import asyncio
 import aiohttp
 import aiohttp.web
@@ -19,7 +18,7 @@ async def stats(req):
         'client': req['servo']['client'],
         'last_read': datetime.datetime.now().isoformat(),
         'last_write': datetime.datetime.now().isoformat(),
-        'session_ttl': req.app['config']['session']['ttl']
+        'session_ttl': req.app['config'].get('session', 'ttl', fallback=300)
     })
 
 
@@ -33,8 +32,10 @@ async def stop_tasks(app):
 
 async def connect_db(app):
     '''Connect and retry connections untill run out of attempts.'''
-    max_attempts = int(app['config'].get('database', 'attempts', fallback=5))
-    wait_time = float(app['config'].get('database', 'attempt_wait', fallback=5.0))
+    max_attempts = int(app['config'].get(
+        'database', 'attempts', fallback=5))
+    wait_time = float(app['config'].get(
+        'database', 'attempt_wait', fallback=5.0))
     attempts = max_attempts
 
     while attempts:
@@ -46,10 +47,11 @@ async def connect_db(app):
 
         except Exception as ex:
             log.error('failed to connect to database.')
-            await asyncio.sleep(5.0, loop=app.loop)
+            await asyncio.sleep(wait_time, loop=app.loop)
             attempts = attempts - 1
             log.debug('retrying connection %d...' % (max_attempts - attempts))
-    raise Exception('Failed to connect to database after %d attempts' % max_attempts)
+    raise Exception('Failed to connect to database after %d attempts' %
+                    max_attempts)
 
 
 async def init_db(app):
@@ -61,6 +63,7 @@ async def init_db(app):
         log.info('initialing database...')
         await servo.db.init(app['database'])
 
+
 def create_app(cfg):
     app = aiohttp.web.Application()
     app['config'] = cfg
@@ -70,10 +73,10 @@ def create_app(cfg):
     app.on_startup.append(start_tasks)
     app.on_cleanup.append(stop_tasks)
 
-    app.router.add_get(   '/',      stats)
-    app.router.add_get(   '/{key}', servo.api.get)
-    app.router.add_post(  '/{key}', servo.api.post)
-    app.router.add_put(   '/{key}', servo.api.put)
+    app.router.add_get('/',         stats)
+    app.router.add_get('/{key}',    servo.api.get)
+    app.router.add_post('/{key}',   servo.api.post)
+    app.router.add_put('/{key}',    servo.api.put)
     app.router.add_delete('/{key}', servo.api.delete)
     return app
 

@@ -1,7 +1,4 @@
 import functools
-import json
-import aiohttp
-import aiohttp.web
 import logging
 
 
