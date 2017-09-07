@@ -28,19 +28,21 @@ setup(
     # Choose your license
     license='MIT',
     packages=find_packages('src', exclude=['contrib', 'docs', 'tests']),
-    package_dir={'':'src'},
+    package_dir={'': 'src'},
     package_data={
         '': ['README.rst', 'VERSION', '*.sql'],
     },
 
     install_requires=requirements,
+    extras_require={
+        'dev': [
+            'flake8'
+        ]
+    },
 
     entry_points={
         'console_scripts': [
             'servo=servo:main',
         ],
-    },
-
-    #test_suite='nose.collector',
-    #tests_require=['nose'],
+    }
 )
