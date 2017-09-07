@@ -18,6 +18,5 @@ def authenticate(func):
             req['servo']['client'],
             func.__name__
         ))
-
         return await func(req)
     return wrapper
