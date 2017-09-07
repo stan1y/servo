@@ -1,16 +1,10 @@
 version: "3.0"
 
 services:
-  kore:
-    build: ./kore
-    image: kore:latest
-
   servo:
-    depends_on:
-      - postgresql
     build: .
     image: servo:latest
-    command: kodev run
+    command: servo --debug
     env_file: ./secrets.env
     volumes:
       - .:/src/servo
@@ -23,11 +17,11 @@ services:
   console:
     depends_on:
       - servo
-    build: ./js
+    build: ./src/js
     image: servo-console:latest
     tty: true
     volumes:
-      - ./js:/src/servo/js
+      - ./src/js:/src/servo/js
       - /src/servo/js/node_modules
     working_dir: /src/servo/js
     command: node app/index.js
