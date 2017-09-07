@@ -1,0 +1,3 @@
+servo-venv
+src/servo/__pycache__
+src/*.egg-info
