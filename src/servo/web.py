@@ -3,11 +3,12 @@ import aiohttp
 import aiohttp.web
 import datetime
 import logging
+import ssl
 
 import servo.auth
 import servo.api
 import servo.db
-
+import servo.err
 
 log = logging.getLogger(__name__)
 
@@ -18,8 +19,8 @@ async def stats(req):
     return aiohttp.web.json_response({
         'client': ctx['token']['id'],
         'session_ttl': ctx['token']['ttl'],
-        'last_read': datetime.datetime.now().isoformat(),
-        'last_write': datetime.datetime.now().isoformat()
+        'last_read': int(datetime.datetime.utcnow().timestamp()),
+        'last_write': int(datetime.datetime.utcnow().timestamp())
     })
 
 
@@ -42,7 +43,6 @@ async def connect_db(app):
     while attempts:
         try:
             pool = await servo.db.create_pool(app['config'])
-            log.debug('connected to %s' % pool)
             app['database'] = pool
             return
 
@@ -51,8 +51,9 @@ async def connect_db(app):
             await asyncio.sleep(wait_time, loop=app.loop)
             attempts = attempts - 1
             log.debug('retrying connection %d...' % (max_attempts - attempts))
-    raise Exception('Failed to connect to database after %d attempts' %
-                    max_attempts)
+    raise servo.err.ConfigurationError(
+        'Failed to connect to database after %d attempts' %
+        max_attempts)
 
 
 async def init_db(app):
@@ -68,6 +69,10 @@ async def init_db(app):
 def create_app(cfg):
     app = aiohttp.web.Application()
     app['config'] = cfg
+    app['jwt_private_key'] = servo.auth.load_key(cfg.get('jwt', 'private',
+                                                 fallback=None))
+    app['jwt_public_key'] = servo.auth.load_key(cfg.get('jwt', 'public',
+                                                fallback=None))
 
     app.on_startup.append(connect_db)
     app.on_startup.append(init_db)
@@ -83,4 +88,11 @@ def create_app(cfg):
 
 
 def create_ssl_context(cfg):
+    cert = cfg.get('ssl', 'cert', fallback=None)
+    key = cfg.get('ssl', 'key', fallback=None)
+    if cert and key:
+        ctx = ssl.create_default_context()
+        log.debug('setting up SSL with: %s, %s' % (cert, key))
+        ctx.load_cert_chain(cert, key)
+        return ctx
     return None

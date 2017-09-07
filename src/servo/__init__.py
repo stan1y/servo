@@ -1,10 +1,13 @@
 import os
+import sys
 import argparse
 import aiohttp
 import aiohttp.web
 import configparser
 import logging
+
 import servo.web
+import servo.err
 
 
 _config_paths = ['$HOME/.servo/conf', '/etc/servo/conf']
@@ -13,23 +16,30 @@ _config_paths = ['$HOME/.servo/conf', '/etc/servo/conf']
 log = logging.getLogger(__name__)
 
 
-def merge_args(cfg, args):
-    cfg['servo']['debug'] = 'yes' if args.debug else 'no'
-    cfg['servo']['ssl'] = 'yes' if args.ssl else 'no'
+def read_config(path):
+    '''Read configuration file from path'''
+    log.debug('reading configuration %s' % path)
+    with open(path, 'r') as f:
+        cfg = configparser.ConfigParser()
+        cfg.read_file(f)
+        return cfg
+    raise servo.err.ConfigurationError(
+        'Failed to read configuration from %s' % path)
 
 
-def read_config(args):
+def load_config(args):
+    '''Load configuration from possible locations'''
+    if args.config and os.path.exists(args.config):
+        return read_config(args.config)
+
     for p in _config_paths:
         path = os.path.expandvars(p)
         if os.path.exists(path):
-            log.debug('reading configuration %s' % path)
-            with open(path, 'r') as f:
-                cfg = configparser.ConfigParser()
-                cfg.read_file(f)
-                merge_args(cfg, args)
-                return cfg
-    raise Exception('No configuration file found at paths: %s' %
-                    ','.join(_config_paths))
+            return read_config(path)
+
+    raise servo.err.ConfigurationError(
+        'No configuration file found at paths: %s' %
+        ','.join(_config_paths))
 
 
 def configure_log(args):
@@ -48,17 +58,25 @@ def main():
                         help='Enable debug mode')
     parser.add_argument('--ssl', default=False, action="store_true",
                         help='Enable SSL endpoint')
+    parser.add_argument('--config',
+                        help='Path to configuration file to use')
 
     args = parser.parse_args()
     configure_log(args)
 
-    cfg = read_config(args)
-    servo_app = servo.web.create_app(cfg)
+    try:
+        cfg = load_config(args)
+        servo_app = servo.web.create_app(cfg)
 
-    aiohttp.web.run_app(
-        app=servo_app,
-        host=cfg['servo']['listen'],
-        port=int(cfg['servo']['port']),
-        ssl_context=servo.web.create_ssl_context(cfg),
-        access_log=None,
-    )
+        aiohttp.web.run_app(
+            app=servo_app,
+            host=cfg['servo']['listen'],
+            port=int(cfg['servo']['port']),
+            ssl_context=servo.web.create_ssl_context(cfg),
+            access_log=None,
+        )
+        sys.exit(0)
+
+    except servo.err.ConfigurationError as cfgerr:
+        log.error('failed to start: %s' % cfgerr)
+        sys.exit(1)

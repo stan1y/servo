@@ -1,21 +1,48 @@
+import os
 import functools
 import logging
 import jwt
 import uuid
 import aiohttp.web
 
+import servo.err
+
 
 log = logging.getLogger(__name__)
 
 
+def load_key(pem_file):
+    log.debug('loading key from %s' % pem_file)
+    if pem_file and os.path.exists(pem_file):
+        with open(pem_file, 'rb') as f:
+            return jwt.jwk_from_pem(f.read())
+    raise servo.err.ConfigurationError("Failed to load JWT key")
+
+
 def read_context_token(req):
+    '''Read authentication header, parse JWT and setup context'''
     auth = req.headers.get('authentication')
     if not auth:
         return None
 
-    header, payload = auth.split(' ')
-    req['context']['token'] = jwt.decode(payload, req.app['jwt_public_key'])
+    scheme, token = auth.split(' ')
+    if scheme.lower() != 'bearer':
+        log.error('unexpected authentication scheme: %s' % scheme)
+        raise aiohttp.web.HttpProcessingError(scheme)
+
+    pub_key = req.app['jwt_public_key']
+    req['context']['token'] = jwt.JWT().decode(token,
+                                               pub_key)
     log.info('{%s} using existing session' % req['context']['token']['id'])
+
+
+def write_context_token(req, resp):
+    '''Write context token to authentication header'''
+    priv_key = req.app['jwt_private_key']
+    alg = req.app['config'].get('jwt', 'alg', fallback='RS256')
+    headers = {'iss': req.headers.get('host')}
+    resp.headers['authentication'] = jwt.JWT().encode(req['context']['token'],
+                                                      priv_key, alg, headers)
 
 
 def init_context(req):
@@ -58,12 +85,14 @@ def authenticate(func):
         if not read_context_token(req):
             init_context(req)
 
+        # log call into request handler
         log.info('{%(client)s} >> %(method)s %(path)s started' % {
             'client': req['context']['token']['id'],
             'method': req.method,
             'path': req.rel_url
         })
         resp = await func(req)
+        write_context_token(req, resp)
         log.info("{%(client)s} << %(method)s %(path)s completed => %(s)d" % {
             'client': req['context']['token']['id'],
             'method': req.method,
