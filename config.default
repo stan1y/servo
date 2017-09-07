@@ -1,0 +1,15 @@
+[servo]
+listen = 0.0.0.0
+port = 8080
+ssl = yes
+public_mode = yes
+
+[database]
+attempts = 10
+attempt_wait = 5
+
+[session]
+ttl = 300
+string_size = 255
+json_size = 1024
+blob_size = 4096
