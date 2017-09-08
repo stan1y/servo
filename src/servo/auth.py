@@ -76,13 +76,15 @@ def write_context_token(req, resp):
     priv_key = req.app['jwt_private_key']
     alg = req.app['config'].get('jwt', 'alg', fallback='RS256')
     headers = {'iss': req.headers.get('host')}
-    resp.headers['authorization'] = jwt.JWT().encode(req['context']['token'],
-                                                     priv_key, alg, headers)
+    encoded = jwt.JWT().encode(req['context']['token'],
+                               priv_key, alg, headers)
+    resp.headers['authorization'] = 'bearer %s' % encoded
 
 
 def init_context(req):
     req['context']['token'] = {
         'id': str(uuid.uuid4()),
+        'iss': req.headers.get('host'),
         'ttl': req.app['config'].get('session', 'ttl', fallback=300)
     }
     log.debug('{%s} allocated new client session' %
@@ -115,8 +117,8 @@ def authenticate(func):
         # read or initialize authorization context
         req['context'] = {
             'token': read_context_token(req),
-            'in_content_type': read_in_type(req),
-            'out_content_type': read_out_type(req)
+            'in_type': read_in_type(req),
+            'out_type': read_out_type(req)
         }
         if not req['context']['token']:
             init_context(req)

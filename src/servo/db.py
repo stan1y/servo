@@ -5,6 +5,8 @@ import aiopg
 import aiohttp.web
 import base64
 
+import servo
+
 log = logging.getLogger(__name__)
 
 # Load sql files on start
@@ -59,7 +61,7 @@ async def init(pool):
             await cur.execute(asset_init_sql)
 
 
-async def read(pool, client, key):
+async def get(pool, client, key):
     '''Read one of the available values for given pair of client and key'''
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
@@ -73,7 +75,36 @@ async def read(pool, client, key):
                 return str_val
             if json_val:
                 log.debug('read json from "%s"' % key)
-                return json.loads(json_val)
+                return json_val
             if blob_val:
                 log.debug('read blob from "%s"' % key)
                 return base64.encode(blob_val)
+
+
+async def post(pool, client, key, stype, charset, content):
+    '''Create new item owner by client with key, type and data'''
+    data = []
+    async for line in content:
+        data.append(line.decode(charset))
+    str_val = None
+    json_val = None
+    blob_val = None
+    if stype == servo.TYPE_STRING or stype == servo.TYPE_HTML:
+        str_val = ''.join(data)
+    elif stype == servo.TYPE_JSON:
+        try:
+            data = json.loads(''.join(data))
+            json_val = json.dumps(data)
+        except Exception as ex:
+            log.error('{%s} invalid json received' % client)
+            raise aiohttp.web.HTTPBadRequest()
+    elif stype == servo.TYPE_BLOB:
+        log.error('blobs not supported yet')
+        raise aiohttp.web.HTTPNotImplemented()
+
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(asset_post_sql, [
+                client, key,
+                str_val, json_val, blob_val
+            ])

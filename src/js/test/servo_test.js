@@ -23,7 +23,7 @@ var uuidV4 = require('uuid/v4');
     test.ifError(value)
 */
 
-var servoUrl = 'https://localhost:8080',
+var servoUrl = 'http://localhost:8080',
   appId = uuidV4(),
   appKey = uuidV4(),
   authMode = 'HS512';
@@ -31,7 +31,7 @@ var servoUrl = 'https://localhost:8080',
 
 var sleepFor = function(duration) {
     var now = new Date().getTime();
-    while(new Date().getTime() < now + duration) {} 
+    while(new Date().getTime() < now + duration) {}
 }
 
 function sleep(ms) {
@@ -81,11 +81,11 @@ exports['servo_tests'] = {
       success: function(body, req) {
         test.equal(req.statusCode, 200, 'unexpected status in get default');
         test.equal(body, 'modified-value', 'unpexpected value returned in get default');
-        test.done(); 
+        test.done();
       },
       error: function(err) {
         test.ok(false, 'get failed: ' + err.message);
-        test.done(); 
+        test.done();
       }
     });
 
@@ -110,10 +110,10 @@ exports['servo_tests'] = {
             test.ok(s.authHeader != null, 'no auth header received on json get');
             test.equal(req.statusCode, 200, 'unexpected status on json get');
             for(var k in jsonData) {
-              test.equal(jsonData[k], body[k], 'returned json does not match: '  
+              test.equal(jsonData[k], body[k], 'returned json does not match: '
                 + jsonData[k] + '!=' + body[k]);
             }
-            test.done();  
+            test.done();
           },
           error: function(err) {
             test.ok(false, 'json get failed:' + err.message);
@@ -135,7 +135,7 @@ exports['servo_tests'] = {
     // post an item
     s.post(textKey, {
       type: 'text',
-      body: textData,    
+      body: textData,
       success: function(body, req) {
         test.equal(req.statusCode, 201, 'unexpected status on text post');
         test.ok(s.authHeader != null, 'no auth header received on text post');
