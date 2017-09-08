@@ -129,6 +129,11 @@ def authenticate(func):
             'method': req.method,
             'path': req.rel_url
         })
+        log.debug('{%s} content types, in: %s, out: %s' % (
+            req['context']['token']['id'],
+            servo.stype2str(req['context']['in_type']),
+            servo.stype2str(req['context']['out_type']),
+        ))
         resp = await func(req)
         write_context_token(req, resp)
         log.info("{%(client)s} << %(method)s %(path)s completed => %(s)d" % {

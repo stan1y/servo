@@ -71,13 +71,10 @@ async def get(pool, client, key):
                 raise aiohttp.web.HTTPNotFound()
             str_val, json_val, blob_val = val
             if str_val:
-                log.debug('read string from "%s"' % key)
                 return str_val
             if json_val:
-                log.debug('read json from "%s"' % key)
                 return json_val
             if blob_val:
-                log.debug('read blob from "%s"' % key)
                 return base64.encode(blob_val)
 
 

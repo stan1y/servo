@@ -10,16 +10,25 @@ import logging
 import servo.web
 import servo.err
 
-
+log = logging.getLogger(__name__)
 _config_paths = ['$HOME/.servo/conf', '/etc/servo/conf']
+
 
 # Servo Item Types
 TYPE_STRING = 1
 TYPE_JSON = 2
 TYPE_BLOB = 3
 TYPE_HTML = 4
+_types = {
+    TYPE_STRING: "string",
+    TYPE_JSON: "json",
+    TYPE_BLOB: "binary",
+    TYPE_HTML: "html"
+}
 
-log = logging.getLogger(__name__)
+
+def stype2str(stype):
+    return _types[stype]
 
 
 def read_config(path):
