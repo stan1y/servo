@@ -128,7 +128,7 @@ exports['servo_tests'] = {
     });
   },
 
-  post_get_text: function(test) {
+  post_get_put_get_text: function(test) {
     var s = servo.Servo(servoUrl),
         textData = uuidV4(),
         textKey = 'test-text-' + uuidV4();
@@ -144,7 +144,31 @@ exports['servo_tests'] = {
           success: function(body, req) {
             test.equal(req.statusCode, 200, 'unexpected status on text get');
             test.equal(body, textData, 'returned string does not match');
-            test.done();
+
+            s.put(textKey, {
+              type: 'text',
+              body: textData + "-modified",
+              success: function(body, req) {
+                test.equal(req.statusCode, 200, 'unexpected status on text put');
+                test.ok(s.authHeader != null, 'no auth header received on text put');
+
+                s.get(textKey, {
+                  success: function(body, req) {
+                    test.equal(req.statusCode, 200, 'unexpected status on text get after put');
+                    test.equal(body, textData + "-modified", 'returned string does not match');
+                    test.done();
+                  },
+                  error: function(err, req) {
+                    test.ok(false, 'get text failed: ' + err.message);
+                    test.done();
+                  }
+                });
+              },
+              error: function(err, req) {
+                test.ok(false, 'put text failed: ' + err.message);
+                test.done();
+              }
+            });
           },
           error: function(err, req) {
             test.ok(false, 'get text failed: ' + err.message);
