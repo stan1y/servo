@@ -61,11 +61,18 @@ async def init(pool):
             await cur.execute(asset_init_sql)
 
 
-async def get(pool, client, key):
+async def get(req):
     '''Read one of the available values for given pair of client and key'''
+    pool = req.app['database']
+    client = req['context']['token']['id']
+    key = req.match_info['key']
+
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(asset_get_sql, [client, key])
+            await cur.execute(asset_get_sql, {
+                'client': client,
+                'key': key
+            })
             val = await cur.fetchone()
             if not val:
                 raise aiohttp.web.HTTPNotFound()
@@ -75,33 +82,66 @@ async def get(pool, client, key):
             if json_val:
                 return json_val
             if blob_val:
-                return base64.encode(blob_val)
+                return base64.b64encode(blob_val)
 
 
-async def post(pool, client, key, stype, charset, content):
-    '''Create new item owner by client with key, type and data'''
-    data = []
-    async for line in content:
-        data.append(line.decode(charset))
+async def get_request_data(req):
+    '''Read request data and produce item payloads'''
     str_val = None
     json_val = None
     blob_val = None
-    if stype == servo.TYPE_STRING or stype == servo.TYPE_HTML:
-        str_val = ''.join(data)
-    elif stype == servo.TYPE_JSON:
-        try:
-            data = json.loads(''.join(data))
-            json_val = json.dumps(data)
-        except Exception as ex:
-            log.error('{%s} invalid json received' % client)
-            raise aiohttp.web.HTTPBadRequest()
-    elif stype == servo.TYPE_BLOB:
-        log.error('blobs not supported yet')
-        raise aiohttp.web.HTTPNotImplemented()
+    stype = req['context']['in_type']
+    if stype == 'text/plain' or stype == 'text/html':
+        str_val = await req.text()
+    elif stype == 'application/json':
+        json_val = json.dumps(await req.json())
+    elif stype == 'multipart/form-data':
+        reader = await req.multipart()
+        afile = await reader.next()
+        size = 0
+        blob_val = b''
+        while True:
+            chunk = await afile.read_chunk()  # 8192 bytes by default.
+            if not chunk:
+                break
+            size += len(chunk)
+            blob_val += chunk
+        blob_val = blob_val.decode(req.charset or 'utf-8')
 
+    return str_val, json_val, blob_val
+
+
+async def post(req):
+    '''Create new item owned by client with key, type and data'''
+    pool = req.app['database']
+    client = req['context']['token']['id']
+    key = req.match_info['key']
+
+    str_val, json_val, blob_val = await get_request_data(req)
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(asset_post_sql, [
-                client, key,
-                str_val, json_val, blob_val
-            ])
+            await cur.execute(asset_post_sql, {
+                'client': client,
+                'key': key,
+                'str_val': str_val,
+                'json_val': json_val,
+                'blob_val': blob_val
+            })
+
+
+async def put(req):
+    '''Modify item owned by client with key, type and data'''
+    pool = req.app['database']
+    client = req['context']['token']['id']
+    key = req.match_info['key']
+
+    str_val, json_val, blob_val = await get_request_data(req)
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(asset_put_sql, {
+                'client': client,
+                'key': key,
+                'str_val': str_val,
+                'json_val': json_val,
+                'blob_val': blob_val
+            })

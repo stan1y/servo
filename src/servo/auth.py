@@ -20,45 +20,9 @@ def load_key(pem_file):
     raise servo.err.ConfigurationError("Failed to load JWT key")
 
 
-def content_type_to_servo(ctype):
-    if 'text/plain' in ctype:
-        return servo.TYPE_STRING
-    if 'application/json' in ctype:
-        return servo.TYPE_JSON
-    if 'multipart/form-data' in ctype:
-        return servo.TYPE_BLOB
-    if 'text/html' in ctype:
-        return servo.TYPE_HTML
-    return None
-
-
-def read_out_type(req):
-    '''Read accept headers and convert to servo item type'''
-    accepts = req.headers.getall('accept', ['text/plain'])
-    for ctype in accepts:
-        stype = content_type_to_servo(ctype)
-        if stype:
-            return stype
-    log.error('unsupported accepted types: %s' % (
-        ', '.join(accepts)))
-    raise aiohttp.web.HTTPBadRequest()
-
-
-def read_in_type(req):
-    '''Read content-type headers and convert to servo item type'''
-    types = req.headers.getall('content-type', ['text/plain'])
-    for ctype in types:
-        stype = content_type_to_servo(ctype)
-        if stype:
-            return stype
-    log.error('unsupported content types: %s' % (
-        ', '.join(types)))
-    raise aiohttp.web.HTTPBadRequest()
-
-
 def read_context_token(req):
     '''Read authorization header, parse JWT and setup context'''
-    auth = req.headers.get('authorization')
+    auth = req.headers.get(aiohttp.hdrs.AUTHORIZATION)
     if not auth:
         return None
 
@@ -78,7 +42,7 @@ def write_context_token(req, resp):
     headers = {'iss': req.headers.get('host')}
     encoded = jwt.JWT().encode(req['context']['token'],
                                priv_key, alg, headers)
-    resp.headers['authorization'] = 'bearer %s' % encoded
+    resp.headers[aiohttp.hdrs.AUTHORIZATION] = 'bearer %s' % encoded
 
 
 def init_context(req):
@@ -117,8 +81,8 @@ def authenticate(func):
         # read or initialize authorization context
         req['context'] = {
             'token': read_context_token(req),
-            'in_type': read_in_type(req),
-            'out_type': read_out_type(req)
+            'in_type': servo.read_in_type(req),
+            'out_type': servo.read_out_type(req)
         }
         if not req['context']['token']:
             init_context(req)
@@ -131,8 +95,8 @@ def authenticate(func):
         })
         log.debug('{%s} content types, in: %s, out: %s' % (
             req['context']['token']['id'],
-            servo.stype2str(req['context']['in_type']),
-            servo.stype2str(req['context']['out_type']),
+            req['context']['in_type'],
+            req['context']['out_type'],
         ))
         resp = await func(req)
         write_context_token(req, resp)

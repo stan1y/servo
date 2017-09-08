@@ -15,20 +15,44 @@ _config_paths = ['$HOME/.servo/conf', '/etc/servo/conf']
 
 
 # Servo Item Types
-TYPE_STRING = 1
-TYPE_JSON = 2
-TYPE_BLOB = 3
-TYPE_HTML = 4
-_types = {
-    TYPE_STRING: "string",
-    TYPE_JSON: "json",
-    TYPE_BLOB: "binary",
-    TYPE_HTML: "html"
-}
+_servo_types = [
+    'text/plain',
+    'text/html',
+    'application/json',
+    'application/base64',
+    'multipart/form-data'
+]
 
 
-def stype2str(stype):
-    return _types[stype]
+def get_content_type(ctype):
+    for t in _servo_types:
+        if t in ctype:
+            return t
+    return None
+
+
+def read_out_type(req):
+    '''Read accept headers and convert to servo item type'''
+    accepts = req.headers.getall(aiohttp.hdrs.ACCEPT, ['text/plain'])
+    for ctype in accepts:
+        stype = get_content_type(ctype)
+        if stype:
+            return stype
+    log.error('unsupported accepted types: %s' % (
+        ', '.join(accepts)))
+    raise aiohttp.web.HTTPBadRequest()
+
+
+def read_in_type(req):
+    '''Read content-type headers and convert to servo item type'''
+    types = req.headers.getall(aiohttp.hdrs.CONTENT_TYPE, ['text/plain'])
+    for ctype in types:
+        stype = get_content_type(ctype)
+        if stype:
+            return stype
+    log.error('unsupported content types: %s' % (
+        ', '.join(types)))
+    raise aiohttp.web.HTTPBadRequest()
 
 
 def read_config(path):
