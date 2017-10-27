@@ -5,14 +5,11 @@ import aiopg
 import aiohttp.web
 import base64
 
-import servo
 
 log = logging.getLogger(__name__)
 
 # Load sql files on start
 here = os.path.abspath(os.path.dirname(__file__))
-with open(os.path.join(here, 'sql', 'init.sql'), 'r') as f:
-    asset_init_sql = f.read()
 with open(os.path.join(here, 'sql', 'get.sql'), 'r') as f:
     asset_get_sql = f.read()
 with open(os.path.join(here, 'sql', 'post.sql'), 'r') as f:
@@ -27,10 +24,10 @@ async def create_pool(cfg):
     '''Create new PostgreSQL connections pool'''
     dsn = cfg['servo'].get('database')
     if not dsn:
-        dbhost = os.environ.get('DB_HOST')
-        dbuser = os.environ.get('DB_USER')
-        dbpass = os.environ.get('DB_PASS')
-        dbname = os.environ.get('DB_NAME')
+        dbhost = os.environ.get('POSTGRES_HOST')
+        dbuser = os.environ.get('POSTGRES_USER')
+        dbpass = os.environ.get('POSTGRES_PASSWORD')
+        dbname = os.environ.get('POSTGRES_DB')
 
         if dbhost and dbuser and dbpass and dbname:
             dsn = 'host=%(h)s dbname=%(n)s ''user=%(u)s password=%(p)s' % {
@@ -39,9 +36,10 @@ async def create_pool(cfg):
             }
 
     if not dsn:
-        raise Exception('No dababase connection details in configuration.')
+        log.error('Database connection is not configured.')
+        raise Exception('Not configured')
 
-    log.debug('connecting...')
+    log.debug('connecting to {0}'.format(dsn))
     return await aiopg.create_pool(dsn)
 
 
@@ -52,13 +50,6 @@ async def get_items_count(pool):
             await cur.execute('select count(key) from item')
             async for row in cur:
                 return row[0]
-
-
-async def init(pool):
-    '''Execute init.sql for given connection pool'''
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(asset_init_sql)
 
 
 async def get(req):
@@ -77,10 +68,12 @@ async def get(req):
             if not val:
                 raise aiohttp.web.HTTPNotFound()
             str_val, json_val, blob_val = val
+            log.debug('{%s} READ RAW:\nSTR:%s\nJSON:%s\nBINARY:%s' % (
+                client, str_val, json_val, blob_val))
             if str_val:
                 return str_val
             if json_val:
-                return json_val
+                return json.dumps(json_val)
             if blob_val:
                 return base64.b64encode(blob_val)
 

@@ -44,6 +44,8 @@ async def connect_db(app):
         try:
             pool = await servo.db.create_pool(app['config'])
             app['database'] = pool
+            count = await servo.db.get_items_count(app['database'])
+            log.debug('found items table with %d records' % count)
             return
 
         except Exception as ex:
@@ -56,16 +58,6 @@ async def connect_db(app):
         max_attempts)
 
 
-async def init_db(app):
-    try:
-        count = await servo.db.get_items_count(app['database'])
-        log.debug('found items table with %d records' % count)
-
-    except Exception as ex:
-        log.info('initialing database...')
-        await servo.db.init(app['database'])
-
-
 def create_app(cfg):
     app = aiohttp.web.Application()
     app['config'] = cfg
@@ -75,7 +67,6 @@ def create_app(cfg):
                                                 fallback=None))
 
     app.on_startup.append(connect_db)
-    app.on_startup.append(init_db)
     app.on_startup.append(start_tasks)
     app.on_cleanup.append(stop_tasks)
 
