@@ -1,6 +1,7 @@
 FROM node:latest
 
 WORKDIR /src/servo/js
+RUN npm install -g grunt
 
 COPY package.json /src/servo/js
 

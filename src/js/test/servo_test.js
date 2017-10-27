@@ -23,7 +23,8 @@ var uuidV4 = require('uuid/v4');
     test.ifError(value)
 */
 
-var servoUrl = 'http://localhost:8080',
+// docker-compose environment expected here
+var servoUrl = 'http://servo:8080',
   appId = uuidV4(),
   appKey = uuidV4(),
   authMode = 'HS512';
@@ -89,8 +90,8 @@ exports['servo_tests'] = {
       }
     });
 
-  },*/
-
+  },
+*/
   post_get_json: function(test) {
     var s = servo.Servo(servoUrl),
         jsonData = {a:1, b:2},

@@ -79,6 +79,6 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-browserify');
 
   // Default task.
-  grunt.registerTask('default', ['nodeunit', 'concat', 'browserify']);
+  grunt.registerTask('default', ['concat', 'browserify', 'uglify']);
 
 };
